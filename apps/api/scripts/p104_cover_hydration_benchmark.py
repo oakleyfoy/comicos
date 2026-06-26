@@ -1,4 +1,4 @@
-"""P104 cover hydration run CLI."""
+"""P104 cover hydration benchmark CLI (timing by stage)."""
 
 from __future__ import annotations
 
@@ -25,7 +25,7 @@ from app.services.p104_hydration_perf import P104PerformanceSummary  # noqa: E40
 from p97_db import get_p97_engine, resolve_p97_database_url  # noqa: E402
 
 LOGGER = logging.getLogger(__name__)
-DEFAULT_OUT = Path("data/p104/cover_hydration_run.json")
+DEFAULT_OUT = Path("data/p104/cover_hydration_benchmark.json")
 PROGRESS_INTERVAL = 25
 
 
@@ -39,65 +39,42 @@ def _format_elapsed(seconds: float) -> str:
     return f"{hours}h{minutes:02d}m"
 
 
-def _progress_line(
-    *,
-    run_id: int,
-    completed: int,
-    failed: int,
-    skipped_no_url: int,
-    pending_remaining: int,
-    elapsed_s: float,
-    covers_per_minute: float,
-    catalog_issue_id: int,
-    last_error: str | None,
-) -> str:
-    parts = [
-        f"run_id={run_id}",
-        f"completed={completed}",
-        f"failed={failed}",
-        f"skipped_no_url={skipped_no_url}",
-        f"pending_remaining={pending_remaining}",
-        f"elapsed={_format_elapsed(elapsed_s)}",
-        f"covers_per_minute={covers_per_minute:.2f}",
-        f"catalog_issue_id={catalog_issue_id}",
-    ]
-    if last_error:
-        parts.append(f"last_error={last_error[:200]}")
-    return "P104 progress " + " ".join(parts)
+def _print_performance_summary(perf_dict: dict) -> None:
+    perf = P104PerformanceSummary()
+    perf.assets_timed = int(perf_dict.get("assets_timed", 0))
+    totals = perf_dict.get("totals_seconds", {})
+    perf.url_resolve = float(totals.get("url_resolve", 0))
+    perf.download = float(totals.get("download", 0))
+    perf.staging_write = float(totals.get("staging_write", 0))
+    perf.original_file_write = float(totals.get("original_file_write", 0))
+    perf.derivative_resize_write = float(totals.get("derivative_resize_write", 0))
+    perf.sha256 = float(totals.get("sha256", 0))
+    perf.phash_ahash_dhash = float(totals.get("phash_ahash_dhash", 0))
+    perf.color_histogram = float(totals.get("color_histogram", 0))
+    perf.db_update_commit = float(totals.get("db_update_commit", 0))
+    perf.total = float(totals.get("total", 0))
+    for line in perf.format_lines():
+        print(line, flush=True)
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="P104 cover hydration batch run")
-    parser.add_argument("--limit", type=int, default=100, help="Max pending assets to hydrate this run")
-    parser.add_argument(
-        "--sync-limit",
-        type=int,
-        default=0,
-        help="Optional queue-build before hydrate: upsert up to N asset rows (0 = existing queue only)",
-    )
+    parser = argparse.ArgumentParser(description="P104 cover hydration benchmark (stage timings)")
+    parser.add_argument("--limit", type=int, default=100, help="Covers to hydrate in this benchmark")
+    parser.add_argument("--sync-limit", type=int, default=0)
     parser.add_argument("--confirm-write", default=None, help="Must be YES to download")
     parser.add_argument("--output", type=Path, default=DEFAULT_OUT)
     parser.add_argument("--database-url", default=None)
-    parser.add_argument("--download-workers", type=int, default=None, help="Concurrent download workers")
-    parser.add_argument("--process-workers", type=int, default=None, help="Image processing worker threads")
-    parser.add_argument(
-        "--downloads-per-minute",
-        type=float,
-        default=None,
-        help="Global download rate cap (default env P104_DOWNLOADS_PER_MINUTE)",
-    )
-    parser.add_argument(
-        "--reprocess",
-        action="store_true",
-        help="Re-hydrate completed assets (otherwise completed rows are skipped)",
-    )
+    parser.add_argument("--download-workers", type=int, default=None)
+    parser.add_argument("--process-workers", type=int, default=None)
+    parser.add_argument("--downloads-per-minute", type=float, default=None)
+    parser.add_argument("--reprocess", action="store_true", help="Re-hydrate completed assets")
     args = parser.parse_args()
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
     logging.getLogger("httpx").setLevel(logging.WARNING)
     logging.getLogger("httpcore").setLevel(logging.WARNING)
 
     if args.confirm_write != "YES":
-        print("Refusing run without --confirm-write YES", file=sys.stderr)
+        print("Refusing benchmark without --confirm-write YES", file=sys.stderr)
         return 2
 
     started_at = time.perf_counter()
@@ -118,18 +95,14 @@ def main() -> int:
         completed = int(run.completed)
         covers_per_minute = (completed / elapsed) * 60.0 if elapsed > 0 else 0.0
         pending_remaining = max(0, int(run.queued) - processed)
-        line = _progress_line(
-            run_id=int(run.id or 0),
-            completed=completed,
-            failed=int(run.failed),
-            skipped_no_url=int(run.skipped_no_url),
-            pending_remaining=pending_remaining,
-            elapsed_s=elapsed,
-            covers_per_minute=covers_per_minute,
-            catalog_issue_id=int(asset.catalog_issue_id),
-            last_error=last_error,
+        print(
+            f"P104 benchmark progress run_id={int(run.id or 0)} "
+            f"completed={completed} failed={int(run.failed)} "
+            f"skipped_no_url={int(run.skipped_no_url)} pending_remaining={pending_remaining} "
+            f"elapsed={_format_elapsed(elapsed)} covers_per_minute={covers_per_minute:.2f} "
+            f"catalog_issue_id={int(asset.catalog_issue_id)}",
+            flush=True,
         )
-        print(line, flush=True)
 
     engine = get_p97_engine(resolve_p97_database_url(args.database_url))
     with Session(engine, expire_on_commit=False) as session:
@@ -144,11 +117,13 @@ def main() -> int:
             downloads_per_minute=args.downloads_per_minute,
             on_asset_processed=on_asset_processed,
         )
+
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(json.dumps(summary, indent=2, default=str), encoding="utf-8")
+
     progress = summary.get("progress", {})
     print(
-        "P104 progress summary "
+        "P104 benchmark progress summary "
         f"run_id={progress.get('run_id')} "
         f"completed={progress.get('completed')} "
         f"failed={progress.get('failed')} "
@@ -157,23 +132,7 @@ def main() -> int:
         f"covers_per_minute={progress.get('covers_per_minute')}",
         flush=True,
     )
-    perf_raw = summary.get("performance", {})
-    if perf_raw:
-        perf = P104PerformanceSummary()
-        perf.assets_timed = int(perf_raw.get("assets_timed", 0))
-        totals = perf_raw.get("totals_seconds", {})
-        perf.url_resolve = float(totals.get("url_resolve", 0))
-        perf.download = float(totals.get("download", 0))
-        perf.staging_write = float(totals.get("staging_write", 0))
-        perf.original_file_write = float(totals.get("original_file_write", 0))
-        perf.derivative_resize_write = float(totals.get("derivative_resize_write", 0))
-        perf.sha256 = float(totals.get("sha256", 0))
-        perf.phash_ahash_dhash = float(totals.get("phash_ahash_dhash", 0))
-        perf.color_histogram = float(totals.get("color_histogram", 0))
-        perf.db_update_commit = float(totals.get("db_update_commit", 0))
-        perf.total = float(totals.get("total", 0))
-        for line in perf.format_lines():
-            print(line, flush=True)
+    _print_performance_summary(summary.get("performance", {}))
     print(json.dumps(summary, indent=2, default=str), flush=True)
     return 0
 

@@ -3,7 +3,10 @@
 from __future__ import annotations
 
 from datetime import date
+from io import BytesIO
+from unittest.mock import patch
 
+from PIL import Image
 from sqlmodel import Session, func, select
 
 from app.models.catalog_master import CatalogImage, CatalogIssue, CatalogPublisher, CatalogSeries
@@ -11,13 +14,16 @@ from app.models.catalog_cover_assets import CatalogCoverAsset, COVER_ASSET_STATU
 from app.services.p104_cover_hydration_service import (
     _comicvine_cover_from_external_ids,
     compute_priority_for_issue,
+    hydrate_cover_asset,
     resolve_cover_url_for_issue,
     run_p104_dry_run,
+    run_p104_hydration,
     sync_cover_assets_batch,
     TIER_INVENTORY,
     TIER_MODERN_MAJOR,
     TIER_UPC,
 )
+from app.services.p104_hydration_perf import P104PerformanceSummary
 
 
 def _seed_issue(session: Session, *, publisher: str = "DC Comics", year: int = 2018) -> CatalogIssue:
@@ -166,3 +172,73 @@ def test_sync_limit_expands_queue_without_duplicating_completed(session: Session
     total_n = int(total[0] if isinstance(total, tuple) else total)
     assert total_n >= 5
     assert total_n <= 8
+
+
+def _tiny_jpeg_bytes() -> bytes:
+    buf = BytesIO()
+    Image.new("RGB", (48, 48), color=(10, 20, 30)).save(buf, format="JPEG")
+    return buf.getvalue()
+
+
+def test_performance_summary_aggregation() -> None:
+    from app.services.p104_hydration_perf import HydrateStageTiming
+
+    perf = P104PerformanceSummary()
+    perf.add(HydrateStageTiming(download=1.0, total=2.0))
+    perf.add(HydrateStageTiming(download=3.0, total=4.0))
+    data = perf.to_dict()
+    assert data["assets_timed"] == 2
+    assert data["totals_seconds"]["download"] == 4.0
+    assert data["avg_seconds_per_asset"]["download"] == 2.0
+
+
+def test_hydrate_skips_complete_without_reprocess(session: Session) -> None:
+    issue = _seed_issue(session)
+    session.add(
+        CatalogImage(
+            issue_id=int(issue.id),
+            source_url="https://example.com/skip.jpg",
+            image_type="cover",
+            source="TEST",
+            download_status="pending",
+        )
+    )
+    session.commit()
+    sync_cover_assets_batch(session, sync_limit=1)
+    session.commit()
+    asset = session.exec(select(CatalogCoverAsset)).first()
+    assert asset is not None
+    asset.status = COVER_ASSET_STATUS_COMPLETE
+    asset.verified_at = asset.updated_at
+    session.add(asset)
+    session.commit()
+
+    with patch(
+        "app.services.p104_cover_hydration_service._download_bytes",
+        return_value=(_tiny_jpeg_bytes(), "image/jpeg"),
+    ) as mocked:
+        outcome = hydrate_cover_asset(session, asset, reprocess=False)
+        mocked.assert_not_called()
+    assert outcome == COVER_ASSET_STATUS_COMPLETE
+
+
+def test_run_hydration_records_stage_performance(session: Session) -> None:
+    _seed_issue_with_cover(session, 2)
+    sync_cover_assets_batch(session, sync_limit=2)
+    session.commit()
+    with patch(
+        "app.services.p104_cover_hydration_service._download_bytes",
+        return_value=(_tiny_jpeg_bytes(), "image/jpeg"),
+    ):
+        summary = run_p104_hydration(
+            session,
+            limit=2,
+            download_workers=1,
+            process_workers=1,
+            downloads_per_minute=600.0,
+        )
+    assert summary["completed"] >= 2
+    perf = summary["performance"]
+    assert perf["assets_timed"] >= 2
+    assert "derivative_resize_write" in perf["totals_seconds"]
+    assert summary["progress"]["covers_per_minute"] >= 0

@@ -183,6 +183,8 @@ class Settings(BaseSettings):
     gcd_enrichment_enabled: bool = Field(default=True, alias="GCD_ENRICHMENT_ENABLED")
     p104_cover_hydration_enabled: bool = Field(default=True, alias="P104_COVER_HYDRATION_ENABLED")
     p104_downloads_per_minute: float = Field(default=30.0, alias="P104_DOWNLOADS_PER_MINUTE")
+    p104_download_workers: int = Field(default=4, alias="P104_DOWNLOAD_WORKERS")
+    p104_process_workers: int = Field(default=4, alias="P104_PROCESS_WORKERS")
     p104_max_retries: int = Field(default=5, alias="P104_MAX_RETRIES")
     p104_retry_backoff_base_seconds: float = Field(default=60.0, alias="P104_RETRY_BACKOFF_BASE_SECONDS")
     p104_year_from: int = Field(default=2000, alias="P104_YEAR_FROM")

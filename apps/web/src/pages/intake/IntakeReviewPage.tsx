@@ -250,12 +250,23 @@ export function IntakeReviewPage(): JSX.Element {
                   {item.barcode_read ? (
                     <>
                       <p>Reconstructed: {String(item.barcode_read.reconstructed_full ?? "—")}</p>
+                      <p>Decoded supplement (bars): {String(item.barcode_read.decoded_supplement ?? "—")}</p>
+                      <p>OCR supplement (left text): {String(item.barcode_read.ocr_supplement ?? item.barcode_read.left_supplement_ocr ?? "—")}</p>
+                      <p>Final supplement: {String(item.barcode_read.final_supplement ?? "—")}</p>
                       <p>
                         Confidence: main {Math.round(Number(item.barcode_read.confidence_main ?? 0) * 100)}%,
                         supplement {Math.round(Number(item.barcode_read.confidence_left ?? 0) * 100)}%
                       </p>
+                      {item.barcode_read.supplement_disagreement ? (
+                        <p className="text-amber-300/90">
+                          Supplement mismatch: bar decode vs left OCR — confirm final supplement.
+                        </p>
+                      ) : null}
                       {item.barcode_read.inferred_supplement ? (
                         <p className="text-amber-300/90">Supplement inferred (not raw OCR).</p>
+                      ) : null}
+                      {item.barcode_read.review_reason ? (
+                        <p className="text-amber-300/90">{String(item.barcode_read.review_reason)}</p>
                       ) : null}
                     </>
                   ) : null}

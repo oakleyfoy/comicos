@@ -5,7 +5,9 @@ from __future__ import annotations
 import json
 import logging
 import math
+import threading
 import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -32,8 +34,16 @@ from app.models.catalog_cover_assets import (
 )
 from app.models.catalog_master import CatalogImage, CatalogIssue, CatalogPublisher, CatalogSeries, CatalogUpc, utc_now
 from app.services.catalog_cover_harvest_service import _cover_root, _http_timeout
-from app.services.catalog_fingerprint_service import fingerprint_image_metadata
+from app.services.catalog_fingerprint_service import (
+    color_histogram_hex,
+    fingerprint_image_path,
+)
 from app.services.cover_images import sha256_raw_bytes
+from app.services.p104_hydration_perf import (
+    GlobalDownloadRateLimiter,
+    HydrateStageTiming,
+    P104PerformanceSummary,
+)
 from app.services.p101_modern_catalog_audit_service import canonical_focus_publisher_label
 
 LOGGER = logging.getLogger(__name__)
@@ -491,7 +501,12 @@ def _download_bytes(url: str) -> tuple[bytes, str | None]:
     return body, response.headers.get("content-type")
 
 
-def _write_derivatives(session: Session, asset: CatalogCoverAsset, original: Path) -> Path:
+def _write_derivatives(
+    session: Session,
+    asset: CatalogCoverAsset,
+    original: Path,
+    timing: HydrateStageTiming | None = None,
+) -> Path:
     asset_id = int(asset.id or 0)
     issue_id = int(asset.catalog_issue_id)
     base_dir = _asset_dir(session, issue_id, asset_id)
@@ -501,13 +516,20 @@ def _write_derivatives(session: Session, asset: CatalogCoverAsset, original: Pat
         rgb = img.convert("RGB")
         orig_w, orig_h = rgb.size
         original_dest = base_dir / "original.bin"
+        t_orig = time.perf_counter()
         if original != original_dest:
             original_dest.write_bytes(original.read_bytes())
         asset.original_path = str(original_dest)
         asset.width = orig_w
         asset.height = orig_h
         asset.file_size = original_dest.stat().st_size
+        if timing is not None:
+            timing.original_file_write += time.perf_counter() - t_orig
+
+        t_sha = time.perf_counter()
         asset.original_sha256 = sha256_raw_bytes(original_dest.read_bytes())
+        if timing is not None:
+            timing.sha256 += time.perf_counter() - t_sha
 
         mapping = {
             "thumbnail": "thumbnail_path",
@@ -516,6 +538,7 @@ def _write_derivatives(session: Session, asset: CatalogCoverAsset, original: Pat
             "large": "large_path",
         }
         medium_path: Path | None = None
+        t_der = time.perf_counter()
         for size_name, attr in mapping.items():
             max_side = sizes.get(size_name, 300)
             copy = rgb.copy()
@@ -525,31 +548,81 @@ def _write_derivatives(session: Session, asset: CatalogCoverAsset, original: Pat
             setattr(asset, attr, str(out))
             if size_name == "medium":
                 medium_path = out
+        if timing is not None:
+            timing.derivative_resize_write += time.perf_counter() - t_der
         if medium_path is None:
             medium_path = base_dir / "medium.jpg"
     return medium_path
 
 
-def _apply_hashes_from_medium(asset: CatalogCoverAsset, medium_path: Path) -> None:
-    meta = fingerprint_image_metadata(medium_path)
-    asset.perceptual_hash = str(meta["phash"])
-    asset.average_hash = str(meta["ahash"])
-    asset.difference_hash = str(meta["dhash"])
-    asset.color_histogram = str(meta["colorhash"])
-    asset.width = int(meta["width"])
-    asset.height = int(meta["height"])
+def _apply_hashes_from_medium(
+    asset: CatalogCoverAsset,
+    medium_path: Path,
+    timing: HydrateStageTiming | None = None,
+) -> None:
+    t_hash = time.perf_counter()
+    phash, dhash, ahash = fingerprint_image_path(medium_path)
+    if timing is not None:
+        timing.phash_ahash_dhash += time.perf_counter() - t_hash
+
+    t_color = time.perf_counter()
+    colorhash = color_histogram_hex(medium_path)
+    if timing is not None:
+        timing.color_histogram += time.perf_counter() - t_color
+
+    with Image.open(medium_path) as img:
+        width, height = img.size
+    file_size = medium_path.stat().st_size
+    asset.perceptual_hash = str(phash)
+    asset.average_hash = str(ahash)
+    asset.difference_hash = str(dhash)
+    asset.color_histogram = str(colorhash)
+    asset.width = int(width)
+    asset.height = int(height)
+    asset.file_size = int(file_size)
 
 
-def hydrate_cover_asset(session: Session, asset: CatalogCoverAsset, *, dry_run: bool = False) -> str:
-    if asset.status == COVER_ASSET_STATUS_COMPLETE and asset.verified_at is not None:
+def _resolve_asset_url(session: Session, asset: CatalogCoverAsset, timing: HydrateStageTiming | None) -> str:
+    t0 = time.perf_counter()
+    url = (asset.source_url or "").strip()
+    if not url:
+        issue = session.get(CatalogIssue, int(asset.catalog_issue_id))
+        if issue is not None:
+            resolved_url, source = resolve_cover_url_for_issue(session, issue)
+            if resolved_url:
+                url = resolved_url.strip()
+                asset.source_url = url
+                if source:
+                    asset.source = source
+    if timing is not None:
+        timing.url_resolve += time.perf_counter() - t0
+    return url
+
+
+def hydrate_cover_asset(
+    session: Session,
+    asset: CatalogCoverAsset,
+    *,
+    dry_run: bool = False,
+    reprocess: bool = False,
+    rate_limiter: GlobalDownloadRateLimiter | None = None,
+    staging_path: Path | None = None,
+    timing: HydrateStageTiming | None = None,
+) -> str:
+    if asset.status == COVER_ASSET_STATUS_COMPLETE and asset.verified_at is not None and not reprocess:
         return COVER_ASSET_STATUS_COMPLETE
 
-    url = (asset.source_url or "").strip()
+    t_asset = time.perf_counter()
+    stage = timing if timing is not None else HydrateStageTiming()
+
+    url = _resolve_asset_url(session, asset, stage)
     if not url:
         asset.status = COVER_ASSET_STATUS_SKIPPED_NO_URL
         asset.last_error = "no source_url"
         asset.updated_at = utc_now()
         session.add(asset)
+        if timing is not None:
+            timing.total = time.perf_counter() - t_asset
         return COVER_ASSET_STATUS_SKIPPED_NO_URL
 
     if dry_run:
@@ -564,13 +637,21 @@ def hydrate_cover_asset(session: Session, asset: CatalogCoverAsset, *, dry_run: 
     issue_id = int(asset.catalog_issue_id)
     base_dir = _asset_dir(session, issue_id, asset_id)
     base_dir.mkdir(parents=True, exist_ok=True)
-    staging = base_dir / "download.bin"
+    staging = staging_path if staging_path is not None else base_dir / "download.bin"
 
     try:
-        body, _ = _download_bytes(url)
-        staging.write_bytes(body)
-        medium_path = _write_derivatives(session, asset, staging)
-        _apply_hashes_from_medium(asset, medium_path)
+        if staging_path is None:
+            if rate_limiter is not None:
+                rate_limiter.wait()
+            t_dl = time.perf_counter()
+            body, _ = _download_bytes(url)
+            stage.download += time.perf_counter() - t_dl
+            t_st = time.perf_counter()
+            staging.write_bytes(body)
+            stage.staging_write += time.perf_counter() - t_st
+
+        medium_path = _write_derivatives(session, asset, staging, stage)
+        _apply_hashes_from_medium(asset, medium_path, stage)
         ok, missing = verify_asset_files(asset)
         if not ok:
             raise RuntimeError(f"missing files after write: {missing}")
@@ -580,11 +661,235 @@ def hydrate_cover_asset(session: Session, asset: CatalogCoverAsset, *, dry_run: 
         asset.verified_at = now
         asset.last_error = None
         asset.updated_at = now
+        t_db = time.perf_counter()
         session.add(asset)
+        session.flush()
+        stage.db_update_commit += time.perf_counter() - t_db
+        if timing is not None:
+            timing.total = time.perf_counter() - t_asset
         return COVER_ASSET_STATUS_COMPLETE
     except Exception as exc:
         _mark_failed(session, asset, str(exc))
+        if timing is not None:
+            timing.total = time.perf_counter() - t_asset
         return COVER_ASSET_STATUS_FAILED
+
+
+@dataclass
+class _StagingDownloadResult:
+    asset_id: int
+    staging_path: Path | None = None
+    error: str | None = None
+    skip_processing: bool = False
+    timing: HydrateStageTiming = field(default_factory=HydrateStageTiming)
+
+
+def _download_asset_to_staging(
+    engine: Any,
+    asset_id: int,
+    staging_path: Path,
+    rate_limiter: GlobalDownloadRateLimiter,
+    *,
+    reprocess: bool,
+) -> _StagingDownloadResult:
+    timing = HydrateStageTiming()
+    with Session(engine, expire_on_commit=False) as session:
+        asset = session.get(CatalogCoverAsset, asset_id)
+        if asset is None:
+            return _StagingDownloadResult(asset_id, error="missing asset", timing=timing)
+        if asset.status == COVER_ASSET_STATUS_COMPLETE and asset.verified_at is not None and not reprocess:
+            return _StagingDownloadResult(asset_id, skip_processing=True, timing=timing)
+        url = _resolve_asset_url(session, asset, timing)
+        session.add(asset)
+        session.commit()
+        if not url:
+            return _StagingDownloadResult(asset_id, error="no source_url", timing=timing)
+
+    rate_limiter.wait()
+    try:
+        t_dl = time.perf_counter()
+        body, _ = _download_bytes(url)
+        timing.download = time.perf_counter() - t_dl
+        t_st = time.perf_counter()
+        staging_path.parent.mkdir(parents=True, exist_ok=True)
+        staging_path.write_bytes(body)
+        timing.staging_write = time.perf_counter() - t_st
+        return _StagingDownloadResult(asset_id, staging_path=staging_path, timing=timing)
+    except Exception as exc:
+        return _StagingDownloadResult(asset_id, error=str(exc), timing=timing)
+
+
+def _bump_run_counters(engine: Any, run_id: int, outcome: str, run_lock: threading.Lock) -> CatalogCoverHydrationRun | None:
+    with run_lock:
+        with Session(engine, expire_on_commit=False) as session:
+            run = session.get(CatalogCoverHydrationRun, run_id)
+            if run is None:
+                return None
+            if outcome == COVER_ASSET_STATUS_COMPLETE:
+                run.completed += 1
+                run.downloaded += 1
+            elif outcome == COVER_ASSET_STATUS_SKIPPED_NO_URL:
+                run.skipped_no_url += 1
+            elif outcome == COVER_ASSET_STATUS_FAILED:
+                run.failed += 1
+            session.add(run)
+            session.commit()
+            session.refresh(run)
+            return run
+
+
+def _process_staged_asset(
+    engine: Any,
+    run_id: int,
+    download: _StagingDownloadResult,
+    *,
+    reprocess: bool,
+    perf: P104PerformanceSummary,
+    run_lock: threading.Lock,
+) -> tuple[int, str, CatalogCoverAsset | None]:
+    timing = download.timing
+    t_asset = time.perf_counter()
+    outcome = COVER_ASSET_STATUS_FAILED
+    asset_ref: CatalogCoverAsset | None = None
+
+    with Session(engine, expire_on_commit=False) as session:
+        asset = session.get(CatalogCoverAsset, download.asset_id)
+        if asset is None:
+            perf.add(timing)
+            _bump_run_counters(engine, run_id, COVER_ASSET_STATUS_FAILED, run_lock)
+            return download.asset_id, COVER_ASSET_STATUS_FAILED, None
+        asset_ref = asset
+
+        if download.skip_processing:
+            outcome = COVER_ASSET_STATUS_COMPLETE
+        elif download.error == "no source_url":
+            asset.status = COVER_ASSET_STATUS_SKIPPED_NO_URL
+            asset.last_error = "no source_url"
+            asset.updated_at = utc_now()
+            session.add(asset)
+            t_db = time.perf_counter()
+            session.commit()
+            timing.db_update_commit += time.perf_counter() - t_db
+            outcome = COVER_ASSET_STATUS_SKIPPED_NO_URL
+        elif download.error:
+            _mark_failed(session, asset, download.error)
+            t_db = time.perf_counter()
+            session.commit()
+            timing.db_update_commit += time.perf_counter() - t_db
+            outcome = COVER_ASSET_STATUS_FAILED
+        elif download.staging_path is None:
+            _mark_failed(session, asset, download.error or "download failed")
+            t_db = time.perf_counter()
+            session.commit()
+            timing.db_update_commit += time.perf_counter() - t_db
+            outcome = COVER_ASSET_STATUS_FAILED
+        else:
+            outcome = hydrate_cover_asset(
+                session,
+                asset,
+                reprocess=reprocess,
+                staging_path=download.staging_path,
+                timing=timing,
+            )
+            t_db = time.perf_counter()
+            session.commit()
+            timing.db_update_commit += time.perf_counter() - t_db
+
+        timing.total = time.perf_counter() - t_asset
+        perf.add(timing)
+
+    if not download.skip_processing:
+        _bump_run_counters(engine, run_id, outcome, run_lock)
+    return download.asset_id, outcome, asset_ref
+
+
+def _run_p104_hydration_concurrent(
+    engine: Any,
+    run: CatalogCoverHydrationRun,
+    work: list[CatalogCoverAsset],
+    *,
+    download_workers: int,
+    process_workers: int,
+    downloads_per_minute: float,
+    reprocess: bool,
+    perf: P104PerformanceSummary,
+    on_asset_processed: Callable[[int, CatalogCoverAsset, CatalogCoverHydrationRun, str], None] | None,
+) -> None:
+    run_id = int(run.id or 0)
+    staging_root = P104_LOG_DIR / f"staging_run_{run_id}"
+    staging_root.mkdir(parents=True, exist_ok=True)
+    rate_limiter = GlobalDownloadRateLimiter(downloads_per_minute)
+    run_lock = threading.Lock()
+    processed_lock = threading.Lock()
+    processed_index = 0
+
+    def _notify(asset_id: int, outcome: str, asset_hint: CatalogCoverAsset | None) -> None:
+        nonlocal processed_index
+        if on_asset_processed is None:
+            return
+        with processed_lock:
+            processed_index += 1
+            index = processed_index
+        with Session(engine, expire_on_commit=False) as session:
+            run_row = session.get(CatalogCoverHydrationRun, run_id)
+            asset_row = session.get(CatalogCoverAsset, asset_id) or asset_hint
+            if run_row is not None and asset_row is not None:
+                on_asset_processed(index, asset_row, run_row, outcome)
+
+    with ThreadPoolExecutor(max_workers=max(1, download_workers)) as download_pool:
+        download_futures = {
+            download_pool.submit(
+                _download_asset_to_staging,
+                engine,
+                int(asset.id or 0),
+                staging_root / f"{int(asset.id or 0)}.bin",
+                rate_limiter,
+                reprocess=reprocess,
+            ): int(asset.id or 0)
+            for asset in work
+        }
+        with ThreadPoolExecutor(max_workers=max(1, process_workers)) as process_pool:
+            process_futures = []
+            for dl_future in as_completed(download_futures):
+                dl_result = dl_future.result()
+                process_futures.append(
+                    process_pool.submit(
+                        _process_staged_asset,
+                        engine,
+                        run_id,
+                        dl_result,
+                        reprocess=reprocess,
+                        perf=perf,
+                        run_lock=run_lock,
+                    )
+                )
+            for proc_future in as_completed(process_futures):
+                asset_id, outcome, asset_hint = proc_future.result()
+                _notify(asset_id, outcome, asset_hint)
+
+
+def _hydration_progress_summary(
+    run: CatalogCoverHydrationRun,
+    *,
+    elapsed_seconds: float,
+    download_workers: int,
+    process_workers: int,
+    downloads_per_minute: float,
+) -> dict[str, Any]:
+    completed = int(run.completed)
+    covers_per_minute = (completed / elapsed_seconds) * 60.0 if elapsed_seconds > 0 else 0.0
+    return {
+        "run_id": int(run.id or 0),
+        "queued": int(run.queued),
+        "completed": completed,
+        "failed": int(run.failed),
+        "skipped_no_url": int(run.skipped_no_url),
+        "elapsed_seconds": round(elapsed_seconds, 2),
+        "covers_per_minute": round(covers_per_minute, 2),
+        "download_workers": download_workers,
+        "process_workers": process_workers,
+        "downloads_per_minute": downloads_per_minute,
+    }
 
 
 def _start_run(session: Session, *, mode: str, limit: int) -> CatalogCoverHydrationRun:
@@ -669,8 +974,17 @@ def run_p104_hydration(
     limit: int = 100,
     sync_limit: int = 0,
     dry_run: bool = False,
+    reprocess: bool = False,
+    download_workers: int | None = None,
+    process_workers: int | None = None,
+    downloads_per_minute: float | None = None,
     on_asset_processed: Callable[[int, CatalogCoverAsset, CatalogCoverHydrationRun, str], None] | None = None,
 ) -> dict[str, Any]:
+    settings = get_settings()
+    dw = max(1, int(download_workers if download_workers is not None else settings.p104_download_workers))
+    pw = max(1, int(process_workers if process_workers is not None else settings.p104_process_workers))
+    dpm = float(downloads_per_minute if downloads_per_minute is not None else settings.p104_downloads_per_minute)
+
     sync_result = sync_cover_assets_batch(session, sync_limit=sync_limit)
     run = _start_run(session, mode="dry_run" if dry_run else "hydrate", limit=limit)
     session.commit()
@@ -686,22 +1000,71 @@ def run_p104_hydration(
     session.add(run)
     session.commit()
 
-    last_download_at: float | None = None
-    for index, asset in enumerate(work, start=1):
-        if not dry_run and asset.source_url:
-            last_download_at = _sleep_for_rate_limit(last_download_at)
-        outcome = hydrate_cover_asset(session, asset, dry_run=dry_run)
-        if outcome == COVER_ASSET_STATUS_COMPLETE:
-            run.completed += 1
-            run.downloaded += 1
-        elif outcome == COVER_ASSET_STATUS_SKIPPED_NO_URL:
-            run.skipped_no_url += 1
-        elif outcome == COVER_ASSET_STATUS_FAILED:
-            run.failed += 1
-        session.add(run)
-        session.commit()
-        if on_asset_processed is not None:
-            on_asset_processed(index, asset, run, outcome)
+    perf = P104PerformanceSummary()
+    rate_limiter = GlobalDownloadRateLimiter(dpm)
+    wall_start = time.perf_counter()
+    engine = session.get_bind()
+
+    use_concurrency = not dry_run and (dw > 1 or pw > 1)
+
+    run_id = int(run.id or 0)
+
+    if use_concurrency:
+        session.refresh(run)
+        _run_p104_hydration_concurrent(
+            engine,
+            run,
+            work,
+            download_workers=dw,
+            process_workers=pw,
+            downloads_per_minute=dpm,
+            reprocess=reprocess,
+            perf=perf,
+            on_asset_processed=on_asset_processed,
+        )
+    else:
+        for index, asset in enumerate(work, start=1):
+            timing: HydrateStageTiming | None = None
+            t_asset = time.perf_counter()
+            if not dry_run:
+                timing = HydrateStageTiming()
+            outcome = hydrate_cover_asset(
+                session,
+                asset,
+                dry_run=dry_run,
+                reprocess=reprocess,
+                rate_limiter=rate_limiter if not dry_run else None,
+                timing=timing,
+            )
+            if outcome == COVER_ASSET_STATUS_COMPLETE:
+                run.completed += 1
+                run.downloaded += 1
+            elif outcome == COVER_ASSET_STATUS_SKIPPED_NO_URL:
+                run.skipped_no_url += 1
+            elif outcome == COVER_ASSET_STATUS_FAILED:
+                run.failed += 1
+            t_db = time.perf_counter()
+            session.add(run)
+            session.commit()
+            if timing is not None:
+                timing.db_update_commit += time.perf_counter() - t_db
+                timing.total = time.perf_counter() - t_asset
+                perf.add(timing)
+            if on_asset_processed is not None:
+                on_asset_processed(index, asset, run, outcome)
+
+    run = session.get(CatalogCoverHydrationRun, run_id)
+    if run is None:
+        raise RuntimeError("hydration run missing after batch")
+
+    elapsed = time.perf_counter() - wall_start
+    progress_summary = _hydration_progress_summary(
+        run,
+        elapsed_seconds=elapsed,
+        download_workers=dw,
+        process_workers=pw,
+        downloads_per_minute=dpm,
+    )
 
     summary = {
         "run_id": int(run.id or 0),
@@ -715,7 +1078,13 @@ def run_p104_hydration(
         "failed": run.failed,
         "skipped_no_url": run.skipped_no_url,
         "dry_run": dry_run,
+        "reprocess": reprocess,
+        "download_workers": dw,
+        "process_workers": pw,
+        "downloads_per_minute": dpm,
         "queue_counts": asset_status_counts(session),
+        "progress": progress_summary,
+        "performance": perf.to_dict(),
     }
     if not dry_run:
         _finish_run(session, run, log_payload=summary)

@@ -3,12 +3,19 @@
 from __future__ import annotations
 
 import io
+import json
+import logging
 from dataclasses import dataclass
-from typing import Literal
+from pathlib import Path
+from typing import Any, Literal
 
 from PIL import Image
 
+logger = logging.getLogger(__name__)
+
 RegionName = Literal["full_expanded", "main_bars", "left_supplement", "right_cover_digit"]
+
+P105_BARCODE_DEBUG_ROOT = Path("data/p105/debug/barcode_regions")
 
 
 @dataclass(frozen=True)
@@ -62,16 +69,18 @@ def split_barcode_box_regions(
     *,
     config: BarcodeCropConfig = DEFAULT_BARCODE_CROP_CONFIG,
 ) -> dict[RegionName, Image.Image]:
-    """Split expanded UPC crop: left supplement OCR, center bars decode, right cover digit OCR."""
+    """Split expanded UPC crop: left human-readable supplement, center bars, right cover digit."""
     w, h = upc_crop.size
-    pad = int(min(w, h) * config.clamped_expand_ratio() * 0.5)
-    left_end = max(pad + 1, int(w * 0.22))
-    right_start = min(w - pad - 1, int(w * 0.82))
+    row_top = max(0, int(h * 0.20))
+    row_bottom = min(h, int(h * 0.82))
+    left_end = max(12, int(w * 0.30))
+    bars_left = max(left_end - 2, int(w * 0.16))
+    right_start = min(w - 12, int(w * 0.74))
     regions: dict[RegionName, Image.Image] = {
         "full_expanded": upc_crop,
-        "left_supplement": upc_crop.crop((0, 0, left_end, h)),
-        "main_bars": upc_crop.crop((left_end, 0, right_start, h)),
-        "right_cover_digit": upc_crop.crop((right_start, 0, w, h)),
+        "left_supplement": upc_crop.crop((0, row_top, left_end, row_bottom)),
+        "main_bars": upc_crop.crop((bars_left, 0, right_start, h)),
+        "right_cover_digit": upc_crop.crop((right_start, row_top, w, row_bottom)),
     }
     return regions
 
@@ -90,3 +99,21 @@ def crop_upc_region_bytes_expanded(
     with Image.open(io.BytesIO(image_bytes)) as img:
         crop = crop_upc_region_pil(img.convert("RGB"), config=config)
         return pil_to_jpeg_bytes(crop)
+
+
+def save_barcode_region_debug_crops(
+    intake_item_id: int,
+    regions: dict[RegionName, Image.Image],
+    *,
+    ocr_debug: dict[str, Any],
+) -> str:
+    """Persist region crops and OCR metadata for intake debugging."""
+    base = P105_BARCODE_DEBUG_ROOT / str(int(intake_item_id))
+    base.mkdir(parents=True, exist_ok=True)
+    for name, pil in regions.items():
+        out = base / f"{name}.jpg"
+        out.write_bytes(pil_to_jpeg_bytes(pil))
+    meta_path = base / "ocr_debug.json"
+    meta_path.write_text(json.dumps(ocr_debug, indent=2, default=str), encoding="utf-8")
+    logger.info("p105.barcode_debug_saved item_id=%s dir=%s", intake_item_id, base)
+    return str(base)

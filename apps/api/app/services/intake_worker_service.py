@@ -215,6 +215,7 @@ def process_intake_item(session: Session, *, item_id: int) -> str:
             image_bytes,
             session=session,
             cover_path=abs_path,
+            intake_item_id=item_id,
             log_context=f"intake item_id={item_id}",
         )
         item.barcode_read_json = p105.to_json()
@@ -257,7 +258,7 @@ def process_intake_item(session: Session, *, item_id: int) -> str:
         item.base_upc = (scan_validation.base_upc or base_upc(normalized))[:16]
         item.extension = scan_validation.extension or supplement_extension(normalized) or None
 
-        if p105.inferred_supplement or not p105.auto_match_allowed:
+        if p105.inferred_supplement or not p105.auto_match_allowed or p105.supplement_disagreement:
             p105_reason = p105.review_reason or "Barcode components unstable — review required."
         else:
             p105_reason = ""
