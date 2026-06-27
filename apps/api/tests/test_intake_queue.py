@@ -15,7 +15,7 @@ from starlette.datastructures import Headers, UploadFile
 import app.models  # noqa: F401
 
 from app.models.asset_ledger import User
-from app.models.catalog_master import CatalogIssue, CatalogPublisher, CatalogSeries
+from app.models.catalog_master import CatalogIssue, CatalogPublisher, CatalogSeries, CatalogUpc
 from app.models.intake_queue import (
     ComicIssueBarcode,
     ITEM_AUTO_MATCHED,
@@ -25,7 +25,9 @@ from app.models.intake_queue import (
     ITEM_READY_FOR_REVIEW,
     IntakeSession,
     IntakeSessionItem,
+    MATCH_SOURCE_CATALOG_UPC,
 )
+from app.services.p105_comic_barcode_read_service import ComicBarcodeReadResult
 import app.services.intake_worker_service as worker
 import app.services.intake_queue_service as svc
 
@@ -358,3 +360,126 @@ def test_worker_rejects_thumbnail_before_barcode_ocr(tmp_path, monkeypatch: pyte
         session.refresh(item)
         assert item.reason and "too small" in item.reason.lower()
         assert "40x20" in item.reason
+
+
+def _patch_p105(monkeypatch: pytest.MonkeyPatch, **overrides: object) -> ComicBarcodeReadResult:
+    supp = FULL_BARCODE[12:17]
+    payload = {
+        "main_upc": FULL_BARCODE[:12],
+        "reconstructed_full": FULL_BARCODE,
+        "final_supplement": supp,
+        "decoded_supplement": supp,
+        "ocr_supplement": "01911",
+        "left_supplement_ocr": "01911",
+        "supplement_disagreement": True,
+        "supplement_decode_confidence": 0.99,
+        "confidence_main": 0.95,
+        "auto_match_allowed": False,
+    }
+    payload.update(overrides)
+    result = ComicBarcodeReadResult(**payload)  # type: ignore[arg-type]
+    monkeypatch.setattr(worker, "read_comic_barcode_from_image_bytes", lambda *a, **k: result)
+    return result
+
+
+def _seed_catalog_upc(session: Session, issue_id: int) -> None:
+    session.add(
+        CatalogUpc(
+            issue_id=issue_id,
+            upc=FULL_BARCODE,
+            normalized_upc=FULL_BARCODE,
+            source="test",
+        )
+    )
+    session.commit()
+
+
+def test_worker_catalog_upc_auto_matched_despite_ocr_disagreement(
+    tmp_path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    engine = _engine()
+    with Session(engine) as session:
+        _seed_user(session)
+        issue_id = _seed_dc_superman_39(session)
+        _seed_catalog_upc(session, issue_id)
+        intake = _intake_session(session)
+        item = _queued_item(session, session_id=int(intake.id), storage_path="ignored.jpg")
+
+        jpeg = _fake_jpeg(tmp_path)
+        _patch_p105(monkeypatch)
+        monkeypatch.setattr(worker, "resolve_photo_import_storage_path", lambda *a, **k: __import__("pathlib").Path(jpeg))
+        monkeypatch.setattr(worker, "cover_contradicts_local_barcode", lambda *a, **k: (False, ""))
+
+        result = worker.process_intake_item(session, item_id=int(item.id))
+
+        assert result == ITEM_AUTO_MATCHED
+        session.refresh(item)
+        assert item.selected_catalog_issue_id == issue_id
+        assert item.match_source == MATCH_SOURCE_CATALOG_UPC
+        assert item.matched_series == "Superman"
+        assert item.matched_issue_number == "39"
+        assert item.status == ITEM_AUTO_MATCHED
+
+
+def test_worker_base_upc_only_needs_review(tmp_path, monkeypatch: pytest.MonkeyPatch) -> None:
+    engine = _engine()
+    with Session(engine) as session:
+        _seed_user(session)
+        _seed_dc_superman_39(session)
+        intake = _intake_session(session)
+        item = _queued_item(session, session_id=int(intake.id), storage_path="ignored.jpg")
+
+        jpeg = _fake_jpeg(tmp_path)
+        base_only = FULL_BARCODE[:12]
+        _patch_p105(
+            monkeypatch,
+            reconstructed_full=base_only,
+            final_supplement="",
+            decoded_supplement="",
+            supplement_disagreement=False,
+        )
+        monkeypatch.setattr(worker, "resolve_photo_import_storage_path", lambda *a, **k: __import__("pathlib").Path(jpeg))
+
+        result = worker.process_intake_item(session, item_id=int(item.id))
+
+        assert result == ITEM_NEEDS_REVIEW
+        session.refresh(item)
+        assert "5-digit supplement" in (item.reason or "").lower() or "supplement" in (item.reason or "").lower()
+
+
+def test_worker_no_catalog_match_needs_review(tmp_path, monkeypatch: pytest.MonkeyPatch) -> None:
+    engine = _engine()
+    with Session(engine) as session:
+        _seed_user(session)
+        intake = _intake_session(session)
+        item = _queued_item(session, session_id=int(intake.id), storage_path="ignored.jpg")
+
+        jpeg = _fake_jpeg(tmp_path)
+        _patch_p105(monkeypatch)
+        monkeypatch.setattr(worker, "resolve_photo_import_storage_path", lambda *a, **k: __import__("pathlib").Path(jpeg))
+        monkeypatch.setattr(worker, "lookup_comicvine_by_barcode", lambda _b: {"matched": False})
+
+        result = worker.process_intake_item(session, item_id=int(item.id))
+
+        assert result == ITEM_NEEDS_REVIEW
+
+
+def test_worker_duplicate_upc_conflict_needs_review(tmp_path, monkeypatch: pytest.MonkeyPatch) -> None:
+    engine = _engine()
+    with Session(engine) as session:
+        _seed_user(session)
+        issue_id = _seed_dc_superman_39(session)
+        _seed_catalog_upc(session, issue_id)
+        intake = _intake_session(session)
+        item = _queued_item(session, session_id=int(intake.id), storage_path="ignored.jpg")
+
+        jpeg = _fake_jpeg(tmp_path)
+        _patch_p105(monkeypatch)
+        monkeypatch.setattr(worker, "resolve_photo_import_storage_path", lambda *a, **k: __import__("pathlib").Path(jpeg))
+        monkeypatch.setattr(worker, "barcode_catalog_identity_conflict", lambda *a, **k: True)
+
+        result = worker.process_intake_item(session, item_id=int(item.id))
+
+        assert result == ITEM_NEEDS_REVIEW
+        session.refresh(item)
+        assert "conflict" in (item.reason or "").lower()

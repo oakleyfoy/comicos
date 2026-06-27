@@ -37,6 +37,7 @@ from app.models.intake_queue import (
     utc_now,
 )
 from app.services.barcode_validation_service import (
+    barcode_encoded_issue_number,
     base_upc,
     effective_publisher_for_barcode,
     supplement_extension,
@@ -50,6 +51,13 @@ from app.services.catalog_ingestion_service import (
     comic_barcode_lookup_keys_for_search,
     direct_market_requires_supplement_key,
     normalize_upc,
+)
+from app.services.intake_barcode_confidence import (
+    barcode_catalog_identity_conflict,
+    cover_contradicts_local_barcode,
+    has_full_direct_market_barcode,
+    is_local_trusted_match_source,
+    ocr_barcode_info_note,
 )
 from app.services.p100_barcode_extraction_service import extract_barcode_from_image
 from app.services.p105_comic_barcode_read_service import (
@@ -159,8 +167,37 @@ def _local_candidate(session: Session, *, source: str, catalog_issue_id: int, va
     }
 
 
+def _stamp_item_barcode_identity(item: IntakeSessionItem, normalized: str) -> None:
+    """Fill publisher/issue from the barcode when catalog match is not yet linked."""
+    pub = effective_publisher_for_barcode(normalized, item.matched_publisher)
+    if pub and not (item.matched_publisher or "").strip():
+        item.matched_publisher = pub
+    encoded = barcode_encoded_issue_number(normalized)
+    if encoded is not None and not (item.matched_issue_number or "").strip():
+        item.matched_issue_number = str(encoded)
+
+
+def _candidate_if_valid(barcode: str, cand: dict[str, Any] | None) -> dict[str, Any] | None:
+    if cand is None:
+        return None
+    work = dict(cand)
+    if not (work.get("publisher") or "").strip():
+        inferred = effective_publisher_for_barcode(barcode, None)
+        if inferred:
+            work["publisher"] = inferred
+    validation = validate_barcode_catalog_match(
+        barcode,
+        publisher=work.get("publisher"),
+        issue_number=work.get("issue_number"),
+        year=work.get("year"),
+    )
+    if validation.status != "exact_match":
+        return None
+    return work
+
+
 def _resolve_candidate(session: Session, *, barcode: str) -> dict[str, Any] | None:
-    """Find the best identification candidate for a normalized barcode (no validation yet)."""
+    """Find the best identification candidate that is consistent with the full barcode."""
     # 1. Learned barcode map — instant, from a prior user accept.
     learned = session.exec(
         select(ComicIssueBarcode).where(ComicIssueBarcode.normalized_barcode == barcode)
@@ -172,10 +209,11 @@ def _resolve_candidate(session: Session, *, barcode: str) -> dict[str, Any] | No
             catalog_issue_id=int(learned.catalog_issue_id),
             variant_id=learned.variant_id,
         )
-        if cand is not None:
-            cand["confidence"] = 0.99
-            cand["learned_row"] = learned
-            return cand
+        valid = _candidate_if_valid(barcode, cand)
+        if valid is not None:
+            valid["confidence"] = 0.99
+            valid["learned_row"] = learned
+            return valid
 
     # 2. Local catalog UPC table (longest key first; never base-only for direct market).
     for key in comic_barcode_lookup_keys_for_search(barcode):
@@ -190,15 +228,16 @@ def _resolve_candidate(session: Session, *, barcode: str) -> dict[str, Any] | No
             catalog_issue_id=int(row.issue_id),
             variant_id=int(row.variant_id) if row.variant_id is not None else None,
         )
-        if cand is not None:
-            cand["confidence"] = 0.97
-            return cand
+        valid = _candidate_if_valid(barcode, cand)
+        if valid is not None:
+            valid["confidence"] = 0.97
+            return valid
 
     # 3. ComicVine on-demand (needs review before inventory).
     cv = lookup_comicvine_by_barcode(barcode)
     if cv and cv.get("matched"):
         cover_date = str(cv.get("cover_date") or "")
-        return {
+        cand = {
             "source": MATCH_SOURCE_COMICVINE,
             "catalog_issue_id": None,
             "variant_id": None,
@@ -209,6 +248,9 @@ def _resolve_candidate(session: Session, *, barcode: str) -> dict[str, Any] | No
             "year": _year_from_cover_date(cover_date),
             "confidence": 0.8,
         }
+        valid = _candidate_if_valid(barcode, cand)
+        if valid is not None:
+            return valid
     return None
 
 
@@ -314,8 +356,18 @@ def process_intake_item(session: Session, *, item_id: int) -> str:
         item.normalized_barcode = normalized[:64]
         item.base_upc = (scan_validation.base_upc or base_upc(normalized))[:16]
         item.extension = scan_validation.extension or supplement_extension(normalized) or None
+        _stamp_item_barcode_identity(item, normalized)
 
-        if p105.inferred_supplement or not p105.auto_match_allowed or p105.supplement_disagreement:
+        local_full_barcode = has_full_direct_market_barcode(normalized)
+        if local_full_barcode:
+            p105_reason = ""
+        elif p105.inferred_supplement:
+            p105_reason = p105.review_reason or "Barcode components unstable — review required."
+        elif p105.supplement_disagreement and not (
+            p105.decoded_supplement
+            and p105.final_supplement == p105.decoded_supplement
+            and (p105.supplement_decode_confidence or 0) >= 0.85
+        ):
             p105_reason = p105.review_reason or "Barcode components unstable — review required."
         else:
             p105_reason = ""
@@ -343,32 +395,15 @@ def process_intake_item(session: Session, *, item_id: int) -> str:
                 session,
                 item,
                 status=ITEM_NEEDS_REVIEW,
-                reason=f"No catalog or ComicVine match for {normalized}.",
+                reason="Not in your catalog yet — use Import & Accept or pick the issue.",
             )
 
-        if not (candidate.get("publisher") or "").strip():
-            inferred = effective_publisher_for_barcode(normalized, None)
-            if inferred:
-                candidate["publisher"] = inferred
-
-        validation = validate_barcode_catalog_match(
-            normalized,
-            publisher=candidate.get("publisher"),
-            issue_number=candidate.get("issue_number"),
-            year=candidate.get("year"),
-        )
-        if validation.status != "exact_match":
-            logger.warning(
-                "intake.item.rejected item_id=%s barcode=%s reason=%s",
-                item_id,
-                normalized,
-                validation.reason,
-            )
+        if local_full_barcode and barcode_catalog_identity_conflict(session, normalized):
             return _finish(
                 session,
                 item,
                 status=ITEM_NEEDS_REVIEW,
-                reason=f"Match failed validation: {validation.reason}",
+                reason="Multiple catalog records conflict for this UPC — pick the correct issue.",
             )
 
         prefix_reason = publisher_validation_for_match(
@@ -411,12 +446,29 @@ def process_intake_item(session: Session, *, item_id: int) -> str:
             session.add(learned_row)
 
         catalog_issue_id = candidate.get("catalog_issue_id")
-        cover_ok = True
-        cover_reason = ""
-        if (
-            catalog_issue_id is not None
-            and candidate["source"] == MATCH_SOURCE_CATALOG_UPC
-        ):
+        local_trusted = (
+            local_full_barcode
+            and is_local_trusted_match_source(str(candidate.get("source")))
+            and catalog_issue_id is not None
+        )
+
+        info_note = ""
+        if local_trusted:
+            ocr_supp = p105.ocr_supplement or p105.left_supplement_ocr or ""
+            info_note = ocr_barcode_info_note(
+                normalized_barcode=normalized,
+                ocr_supplement=ocr_supp,
+                matched_series=candidate.get("series"),
+                matched_issue_number=candidate.get("issue_number"),
+            ) or ""
+            blocked, cover_msg = cover_contradicts_local_barcode(
+                session,
+                image_path=abs_path,
+                catalog_issue_id=int(catalog_issue_id),
+            )
+            if blocked:
+                return _finish(session, item, status=ITEM_NEEDS_REVIEW, reason=cover_msg)
+        elif catalog_issue_id is not None and candidate["source"] == MATCH_SOURCE_CATALOG_UPC:
             cover_ok, cover_reason = _cover_confirms_barcode_match(
                 session,
                 image_path=abs_path,
@@ -431,7 +483,7 @@ def process_intake_item(session: Session, *, item_id: int) -> str:
                     reason=f"Barcode match needs cover confirmation: {cover_reason}",
                 )
 
-        if p105_reason and candidate["source"] == MATCH_SOURCE_CATALOG_UPC:
+        if p105_reason and not local_trusted and candidate["source"] == MATCH_SOURCE_CATALOG_UPC:
             return _finish(
                 session,
                 item,
@@ -439,19 +491,25 @@ def process_intake_item(session: Session, *, item_id: int) -> str:
                 reason=p105_reason,
             )
 
-        # Local high-confidence match -> auto matched. ComicVine -> needs human confirm.
-        final_status = (
-            ITEM_AUTO_MATCHED
-            if candidate["source"] in {MATCH_SOURCE_LEARNED, MATCH_SOURCE_CATALOG_UPC}
-            else ITEM_READY_FOR_REVIEW
-        )
-        return _finish(session, item, status=final_status, reason=cover_reason if cover_ok and cover_reason else None)
+        if local_trusted:
+            final_status = ITEM_AUTO_MATCHED
+            finish_reason = info_note or None
+        else:
+            final_status = (
+                ITEM_AUTO_MATCHED
+                if candidate["source"] in {MATCH_SOURCE_LEARNED, MATCH_SOURCE_CATALOG_UPC}
+                else ITEM_READY_FOR_REVIEW
+            )
+            finish_reason = None
+        return _finish(session, item, status=final_status, reason=finish_reason)
     except Exception as exc:  # noqa: BLE001
         logger.exception("intake.item.failed item_id=%s", item_id)
         return _fail(session, item, f"Processing error: {exc}")
 
 
 def _finish(session: Session, item: IntakeSessionItem, *, status: str, reason: str | None) -> str:
+    if item.normalized_barcode:
+        _stamp_item_barcode_identity(item, item.normalized_barcode)
     item.status = status
     item.reason = reason
     item.processed_at = utc_now()

@@ -76,6 +76,12 @@ def parse_comic_upc_extension(extension: str) -> ExtensionParse | None:
     )
 
 
+def barcode_encoded_issue_number(barcode: str) -> int | None:
+    """Issue # encoded in the 5-digit direct-market supplement (e.g. 03921 -> 39)."""
+    parsed = parse_comic_upc_extension(supplement_extension(barcode))
+    return parsed.issue_number if parsed is not None else None
+
+
 def expected_publisher_keywords(barcode: str) -> tuple[str, ...]:
     prefix = normalize_upc(barcode)[:6]
     return PUBLISHER_PREFIXES.get(prefix, ())

@@ -450,15 +450,20 @@ def _resolve_supplement_decision(
         decision.recovery = "merged"
 
         if ocr_supp and ocr_supp != bar_supp:
-            decision.disagreement = True
             bar_in_cat = bar_supp in catalog_map
             ocr_in_cat = ocr_supp in catalog_map
+            if addon.check_valid or bar_in_cat:
+                decision.disagreement = False
+                decision.review_reason = ""
+            else:
+                decision.disagreement = True
             fp_bar = _fingerprint_for_supplement(session, cover_path, catalog_map, bar_supp)
             fp_ocr = _fingerprint_for_supplement(session, cover_path, catalog_map, ocr_supp)
-            decision.review_reason = (
-                f"Add-on bars read {bar_supp} ({decision.decode_method}) but printed OCR read {ocr_supp}; "
-                "using bar decode — confirm in review."
-            )
+            if decision.disagreement:
+                decision.review_reason = (
+                    f"Add-on bars read {bar_supp} ({decision.decode_method}) but printed OCR read {ocr_supp}; "
+                    "using bar decode — confirm in review."
+                )
             if not addon.check_valid and ocr_in_cat and fp_ocr >= 80.0 and (not bar_in_cat or fp_bar < 65.0):
                 decision.corrected_supplement = ocr_supp
                 decision.review_reason = (

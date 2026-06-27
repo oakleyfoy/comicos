@@ -82,6 +82,25 @@ describe("IntakeReviewPage", () => {
     expect(await screen.findByTestId("count-auto_matched")).toHaveTextContent("1");
     expect(screen.getByTestId("count-ready_for_review")).toHaveTextContent("1");
     expect(screen.getByText("Superman #39")).toBeInTheDocument();
+    expect(screen.getByText("DC Comics · 2015")).toBeInTheDocument();
+  });
+
+  it("shows local catalog success for high-confidence barcode match", async () => {
+    vi.spyOn(intake, "getIntakeReview").mockResolvedValue({
+      ...baseReview,
+      items: [
+        {
+          ...baseReview.items[0],
+          status: "auto_matched",
+          match_source: "catalog_upc",
+          reason: "Printed supplement OCR read issue #19, but barcode matched Superman #39.",
+        },
+      ],
+    });
+    renderReview();
+    expect(await screen.findByText("Barcode matched local catalog.")).toBeInTheDocument();
+    expect(screen.getByText(/Printed supplement OCR read issue #19/)).toBeInTheDocument();
+    expect(screen.queryByText(/Barcode and printed supplement disagree/)).not.toBeInTheDocument();
   });
 
   it("adds an item to inventory", async () => {

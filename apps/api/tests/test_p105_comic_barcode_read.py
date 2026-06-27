@@ -64,12 +64,18 @@ def _no_addon() -> UpAddonDecodeResult:
     return UpAddonDecodeResult()
 
 
-def _addon(supp: str, *, confidence: float = 0.91, method: str = "pyzbar:combined_strip") -> UpAddonDecodeResult:
+def _addon(
+    supp: str,
+    *,
+    confidence: float = 0.91,
+    method: str = "pyzbar:combined_strip",
+    check_valid: bool = False,
+) -> UpAddonDecodeResult:
     return UpAddonDecodeResult(
         supplement=supp,
         confidence=confidence,
         method=method,
-        check_valid=False,
+        check_valid=check_valid,
         reconstructed_full=f"{MAIN}{supp}",
     )
 
@@ -271,7 +277,7 @@ def test_addon_bars_win_when_ocr_wrong(monkeypatch) -> None:
         return_value=(MAIN, 0.95),
     ), patch(
         "app.services.p105_comic_barcode_read_service.decode_upc_addon",
-        return_value=_addon(SUPP_FULL, confidence=0.93),
+        return_value=_addon(SUPP_FULL, confidence=0.93, check_valid=True),
     ), patch(
         "app.services.p105_supplement_ocr._ocr_variant",
         side_effect=fake_variant,
@@ -281,7 +287,8 @@ def test_addon_bars_win_when_ocr_wrong(monkeypatch) -> None:
     assert result.final_supplement == SUPP_FULL
     assert result.supplement_decode_method.startswith("pyzbar")
     assert result.ocr_supplement == "02111"
-    assert result.supplement_disagreement is True
+    assert result.supplement_disagreement is False
+    assert result.auto_match_allowed is True
 
 
 def test_ocr_fallback_when_addon_unreadable(monkeypatch) -> None:

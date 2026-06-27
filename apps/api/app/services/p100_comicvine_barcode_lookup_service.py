@@ -11,6 +11,7 @@ from app.services.catalog_ingestion_service import (
     comic_barcode_lookup_keys_for_search,
     normalize_upc,
 )
+from app.services.barcode_validation_service import barcode_encoded_issue_number
 from app.services.comicvine_api_response import (
     comicvine_best_cover_url,
     payload_results,
@@ -33,6 +34,23 @@ def _empty_lookup(*, raw: dict[str, Any] | None = None) -> dict[str, Any]:
         "image_url": None,
         "raw": raw,
     }
+
+
+def _issue_number_from_row(row: dict[str, Any]) -> int | None:
+    text = str(row.get("issue_number") or "").strip().lstrip("#")
+    if text.isdigit():
+        return int(text)
+    return None
+
+
+def _prefer_rows_matching_barcode_issue(rows: list[dict[str, Any]], barcode: str) -> list[dict[str, Any]]:
+    expected = barcode_encoded_issue_number(barcode)
+    if expected is None or not rows:
+        return rows
+    matched = [r for r in rows if _issue_number_from_row(r) == expected]
+    if matched:
+        return matched
+    return rows
 
 
 def _row_matches_barcode(row: dict[str, Any], normalized: str) -> bool:
@@ -108,6 +126,7 @@ def lookup_comicvine_by_barcode(barcode: str) -> dict[str, Any]:
             rows = [row for row in rows if _row_matches_barcode(row, candidate)]
 
         if rows:
+            rows = _prefer_rows_matching_barcode_issue(rows, barcode)
             result = _issue_from_row(rows[0])
             logger.info(
                 "p100.comicvine_barcode_lookup.success barcode=%s comicvine_issue_id=%s",

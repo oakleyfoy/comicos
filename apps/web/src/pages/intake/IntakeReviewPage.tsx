@@ -48,40 +48,56 @@ function intakeBarcode(item: IntakeItem): string {
   return item.normalized_barcode || fromRead || item.raw_barcode || "";
 }
 
+function isLocalCatalogBarcodeMatch(item: IntakeItem): boolean {
+  return (
+    item.status === "auto_matched" &&
+    (item.match_source === "catalog_upc" || item.match_source === "learned_barcode") &&
+    Boolean(item.selected_catalog_issue_id)
+  );
+}
+
 function intakeHeadline(item: IntakeItem): string {
   const series = item.matched_series?.trim();
   const num = item.matched_issue_number?.trim();
   if (series) {
     return [series, num ? `#${num.replace(/^#/, "")}` : null].filter(Boolean).join(" ");
   }
-  const ext = item.extension?.replace(/\D/g, "") ?? "";
-  if (ext.length === 5) {
-    const issue = parseInt(ext.slice(0, 3), 10);
-    if (issue > 0) {
-      const pub =
-        item.matched_publisher?.trim() ||
-        (item.base_upc?.startsWith("761941") ? "DC Comics" : "") ||
-        (item.base_upc?.startsWith("759606") ? "Marvel" : "");
-      return pub ? `${pub} · issue #${issue}` : `Issue #${issue}`;
-    }
-  }
   return "Unidentified";
 }
 
-function intakeSubtitle(item: IntakeItem): string | null {
+function intakeSubtitle(item: IntakeItem): string {
   const parts: string[] = [];
-  if (item.matched_series && item.matched_publisher) {
-    parts.push(item.matched_publisher);
-  } else if (item.matched_publisher && !item.matched_series) {
-    parts.push(item.matched_publisher);
+  const pub = item.matched_publisher?.trim();
+  if (pub) parts.push(pub);
+  if (item.matched_year?.trim()) parts.push(item.matched_year.trim());
+  return parts.join(" · ");
+}
+
+function intakeInfoMessage(item: IntakeItem): Array<{ tone: "success" | "info" | "warn"; text: string }> {
+  const lines: Array<{ tone: "success" | "info" | "warn"; text: string }> = [];
+  if (isLocalCatalogBarcodeMatch(item)) {
+    lines.push({ tone: "success", text: "Barcode matched local catalog." });
+    const note = item.reason?.trim();
+    if (note && /printed supplement OCR/i.test(note)) {
+      lines.push({ tone: "info", text: note });
+    }
+    return lines;
   }
-  if (item.matched_year) parts.push(item.matched_year);
-  return parts.length ? parts.join(" · ") : null;
+  if (item.status === "auto_matched") {
+    lines.push({ tone: "success", text: "High-confidence barcode match." });
+  }
+  return lines;
 }
 
 function intakeUserReason(item: IntakeItem): string | null {
+  if (isLocalCatalogBarcodeMatch(item)) {
+    return null;
+  }
   const raw = item.reason?.trim();
   if (!raw) return null;
+  if (/printed supplement OCR/i.test(raw)) {
+    return null;
+  }
   if (raw.startsWith("Match failed validation: ")) {
     const detail = raw.slice("Match failed validation: ".length);
     if (/expects dc/i.test(detail) && /unknown/i.test(detail)) {
@@ -94,6 +110,9 @@ function intakeUserReason(item: IntakeItem): string | null {
   }
   if (raw.startsWith("No catalog or ComicVine match")) {
     return "No match in catalog yet — import from ComicVine or search manually.";
+  }
+  if (raw.startsWith("Not in your catalog yet")) {
+    return raw;
   }
   if (raw.includes("5-digit supplement")) {
     return "Couldn’t read the full barcode — rescan with the supplement visible.";
@@ -126,9 +145,11 @@ function StatusBadge({ status }: { status: string }): JSX.Element {
           : status === "failed" || status === "rejected"
             ? "bg-rose-600/25 text-rose-200"
             : "bg-slate-700/50 text-slate-300";
+  const label =
+    status === "auto_matched" ? "Ready to add" : (STATUS_LABEL[status] ?? status);
   return (
     <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${tone}`}>
-      {STATUS_LABEL[status] ?? status}
+      {label}
     </span>
   );
 }
@@ -283,6 +304,7 @@ export function IntakeReviewPage(): JSX.Element {
         {items.map((item) => {
           const busy = busyId === item.id;
           const canConfirm = item.selected_catalog_issue_id != null;
+          const localMatch = isLocalCatalogBarcodeMatch(item);
           const reviewable =
             item.status === "ready_for_review" ||
             item.status === "needs_review" ||
@@ -290,6 +312,7 @@ export function IntakeReviewPage(): JSX.Element {
           const canImport =
             !canConfirm &&
             reviewable &&
+            item.status !== "auto_matched" &&
             (item.matched_series != null || item.normalized_barcode != null);
           return (
             <article key={item.id} className="flex gap-3 rounded-xl border border-slate-800 bg-slate-900/60 p-3">
@@ -310,7 +333,23 @@ export function IntakeReviewPage(): JSX.Element {
                 {intakeBarcode(item) ? (
                   <p className="mt-1 font-mono text-xs text-slate-500">{intakeBarcode(item)}</p>
                 ) : null}
-                {item.barcode_read?.supplement_disagreement ? (
+                {intakeInfoMessage(item).map((info) => (
+                  <p
+                    key={info.text}
+                    className={`mt-2 text-sm ${
+                      info.tone === "success"
+                        ? "text-sky-200"
+                        : info.tone === "info"
+                          ? "text-slate-400"
+                          : "text-orange-200/90"
+                    }`}
+                  >
+                    {info.text}
+                  </p>
+                ))}
+                {!localMatch &&
+                item.barcode_read?.supplement_disagreement &&
+                item.barcode_read.decoded_supplement !== item.barcode_read.final_supplement ? (
                   <p className="mt-1 text-xs text-amber-300/90">
                     Barcode and printed supplement disagree — confirm before adding.
                   </p>
@@ -357,7 +396,9 @@ export function IntakeReviewPage(): JSX.Element {
                         type="button"
                         disabled={busy}
                         onClick={() => void runAction(item.id, () => addIntakeItemToInventory(item.id))}
-                        className="rounded-lg bg-sky-700 px-3 py-1.5 text-xs font-semibold disabled:opacity-50"
+                        className={`rounded-lg px-3 py-1.5 text-xs font-semibold disabled:opacity-50 ${
+                          localMatch ? "bg-emerald-500 text-slate-950" : "bg-sky-700"
+                        }`}
                       >
                         Add to inventory
                       </button>
