@@ -129,23 +129,45 @@ def normalize_upc(raw: str) -> str:
     return re.sub(r"[\s\-]", "", (raw or "").strip())
 
 
-# Modern US direct-market floppy prefixes (12-digit UPC + 5-digit supplement box).
+# Known direct-market UPC company prefixes (12-digit body + 5-digit supplement).
 DIRECT_MARKET_UPC_PREFIXES = (
     "761941",  # DC
     "759606",  # Marvel
-    "709785",  # Dark Horse / others
-    "827714",  # Image (common)
+    "761568",  # Dark Horse
+    "709853",  # Image / Wildstorm
+    "709785",  # assorted direct-market
+    "827714",  # Image
+    "856470",  # assorted indies
+    "859990",  # assorted indies
 )
 
 
-def direct_market_requires_supplement_key(digits: str) -> bool:
+def _optional_gcd_sqlite_path() -> Path | None:
+    try:
+        from app.core.config import get_settings
+
+        path = get_settings().gcd_sqlite_path
+        return path if path.is_file() else None
+    except Exception:
+        return None
+
+
+def direct_market_requires_supplement_key(digits: str, *, gcd_path: Path | None = None) -> bool:
     """True when a 12-digit-only scan is not enough to identify the issue."""
     normalized = normalize_upc(digits)
     if len(normalized) >= 17:
         return False
     if len(normalized) < 12:
         return False
-    return any(normalized.startswith(prefix) for prefix in DIRECT_MARKET_UPC_PREFIXES)
+    if any(normalized.startswith(prefix) for prefix in DIRECT_MARKET_UPC_PREFIXES):
+        return True
+    path = gcd_path if gcd_path is not None else _optional_gcd_sqlite_path()
+    if path is not None:
+        from app.services.gcd_barcode_search_service import gcd_upc12_has_full_barcode_variants
+
+        if gcd_upc12_has_full_barcode_variants(path, normalized):
+            return True
+    return False
 
 
 def comic_barcode_lookup_variants(raw: str) -> list[str]:

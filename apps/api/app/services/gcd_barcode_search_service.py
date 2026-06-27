@@ -163,6 +163,22 @@ def _gcd_issue_text_columns(gcd_path: Path) -> tuple[str, ...]:
     return tuple(out) if out else ("barcode",)
 
 
+def gcd_upc12_has_full_barcode_variants(gcd_path: Path, upc12: str) -> bool:
+    """True when GCD stores any 17-digit (UPC+5) barcode for this 12-digit base."""
+    digits = normalize_upc(upc12)
+    if len(digits) != 12 or not gcd_path.is_file():
+        return False
+    conn = sqlite3.connect(gcd_path)
+    try:
+        row = conn.execute(
+            "SELECT 1 FROM gcd_issue WHERE barcode LIKE ? AND LENGTH(barcode) >= 17 LIMIT 1",
+            (digits + "%",),
+        ).fetchone()
+        return row is not None
+    finally:
+        conn.close()
+
+
 def search_gcd_barcode_fields(gcd_path: Path, scanned_barcode: str) -> GcdBarcodeSearchReport:
     normalized = normalize_upc(scanned_barcode) or scanned_barcode.strip()
     full, upc12, supp = _search_patterns(normalized)

@@ -25,8 +25,11 @@ from app.services.barcode_validation_service import (
 )
 from app.services.catalog_ingestion_service import (
     direct_market_requires_supplement_key,
+    merge_comic_upc_decodes,
+    normalize_upc,
     upc_check_digit_valid,
 )
+from app.services.photo_import_upc_barcode_decoder import collect_raw_upc_candidates_from_pil
 from app.services import p105_comic_barcode_regions as _p105_regions
 from app.services.p105_comic_barcode_regions import (
     BarcodeCropConfig,
@@ -619,6 +622,16 @@ def read_comic_barcode_from_image_bytes(
 
     addon = decode_upc_addon(pil, geometry, main_upc=main_upc) if main_upc else UpAddonDecodeResult()
     decoded_supplement = addon.supplement
+    if main_upc and len(decoded_supplement) != 5:
+        merged_full = merge_comic_upc_decodes([main_upc, *collect_raw_upc_candidates_from_pil(pil)])
+        merged_norm = normalize_upc(merged_full or "")
+        if len(merged_norm) >= 17 and merged_norm.startswith(normalize_upc(main_upc)):
+            decoded_supplement = merged_norm[12:17]
+            if not addon.supplement:
+                addon.supplement = decoded_supplement
+                addon.reconstructed_full = merged_norm[:17]
+                addon.method = addon.method or "full_image_merge"
+                addon.confidence = max(addon.confidence, 0.9)
 
     catalog_map: dict[str, int] = {}
     if session is not None and main_upc:
@@ -631,7 +644,11 @@ def read_comic_barcode_from_image_bytes(
     left_variants: list[tuple[str, Image.Image]] = [("supplement_text_only", supplement_text_crop)]
     attempts: list[Any] = []
     vision_attempt = None
-    run_ocr = geometry.supplement_ocr_allowed
+    main_upc_digits = normalize_upc(main_upc or "")
+    missing_supplement = len(decoded_supplement) != 5
+    run_ocr = geometry.supplement_ocr_allowed or (
+        bool(main_upc_digits) and len(main_upc_digits) == 12 and missing_supplement
+    )
     run_ocr_fallback = run_ocr and not decoded_supplement
     if run_ocr:
         vision_attempt = _vision_supplement_attempt(

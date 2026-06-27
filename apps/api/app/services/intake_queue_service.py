@@ -682,7 +682,31 @@ def import_and_accept_intake_item(
                     item.normalized_barcode,
                 )
                 return item
-        except Exception:
+        except Exception as exc:
+            from app.services.gcd_catalog_import_dashboard_service import resolve_gcd_path
+            from app.services.gcd_barcode_search_service import find_gcd_rows_by_normalized_barcode
+
+            gcd_path = resolve_gcd_path(None)
+            lookup = (item.normalized_barcode or "").strip()
+            gcd_hit = bool(
+                gcd_path.is_file()
+                and lookup
+                and find_gcd_rows_by_normalized_barcode(gcd_path, lookup)
+            )
+            if gcd_hit:
+                logger.warning(
+                    "intake.import.gcd_barcode_gap_failed item_id=%s barcode=%s",
+                    item.id,
+                    item.normalized_barcode,
+                    exc_info=True,
+                )
+                raise HTTPException(
+                    status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                    detail=(
+                        "This barcode is in GCD but catalog import failed. "
+                        "Retry Import & Accept or contact ops — ComicVine import was not used."
+                    ),
+                ) from exc
             logger.debug("intake.import.gcd_barcode_gap_failed item_id=%s", item.id, exc_info=True)
 
     from app.services.catalog_ingestion_service import catalog_series_id_for_comicvine_volume

@@ -6,7 +6,7 @@ import json
 from pathlib import Path
 from typing import Any
 
-from app.services.catalog_ingestion_service import normalize_upc
+from app.services.catalog_ingestion_service import merge_comic_upc_decodes, normalize_upc
 from app.services.gcd_barcode_search_service import find_gcd_rows_by_normalized_barcode
 from app.services.p105_comic_barcode_read_service import ComicBarcodeReadResult
 from app.services.p106_barcode_gap_resolver_service import (
@@ -20,6 +20,41 @@ DECODE_DISAGREEMENT_REASON = "Barcode decode disagreement — rescan with the fu
 LOW_CONFIDENCE_DECODE_REASON = (
     "Barcode read confidence is low and GCD has no exact match — rescan before importing."
 )
+
+
+def _five_digit_supplement(value: str | None) -> str:
+    digits = normalize_upc(value or "")
+    return digits if len(digits) == 5 else ""
+
+
+def try_resolve_seventeen_digit_barcode_from_p105(*, normalized: str, p105: ComicBarcodeReadResult) -> str | None:
+    """Merge 12-digit main UPC with any recovered 5-digit supplement from P105."""
+    digits = normalize_upc(normalized)
+    if len(digits) >= 17:
+        return digits[:17]
+    main = normalize_upc(p105.main_upc or digits)
+    if len(main) != 12:
+        return None
+    supplements: list[str] = []
+    for raw in (
+        p105.final_supplement,
+        p105.decoded_supplement,
+        p105.ocr_supplement,
+        p105.left_supplement_ocr,
+        p105.corrected_supplement,
+    ):
+        sup = _five_digit_supplement(raw)
+        if sup:
+            supplements.append(sup)
+    unique = list(dict.fromkeys(supplements))
+    if len(unique) == 1:
+        merged = merge_comic_upc_decodes([main, unique[0]])
+        if merged and len(normalize_upc(merged)) >= 17:
+            return normalize_upc(merged)[:17]
+    recon = normalize_upc(p105.reconstructed_full or "")
+    if len(recon) >= 17:
+        return recon[:17]
+    return None
 
 
 def comic_barcode_scan_is_partial(*, normalized: str, p105: ComicBarcodeReadResult) -> bool:

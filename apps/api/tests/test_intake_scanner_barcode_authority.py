@@ -13,8 +13,8 @@ import app.models  # noqa: F401
 
 from app.core.config import API_ROOT, get_settings
 from app.models.asset_ledger import User
-from app.models.catalog_master import CatalogUpc
-from app.models.intake_queue import ITEM_AUTO_MATCHED, ITEM_NEEDS_REVIEW, ITEM_QUEUED, IntakeSession, IntakeSessionItem
+from app.models.catalog_master import CatalogIssue, CatalogPublisher, CatalogSeries, CatalogUpc
+from app.models.intake_queue import ITEM_AUTO_MATCHED, ITEM_NEEDS_REVIEW, ITEM_QUEUED, ITEM_READY_FOR_REVIEW, IntakeSession, IntakeSessionItem
 from app.services.intake_barcode_confidence import CoverFingerprintOutcome
 from app.services.intake_scanner_barcode_authority_service import (
     PARTIAL_BARCODE_REASON,
@@ -194,6 +194,65 @@ def test_decode_review_flags_likely_misread_upc(tmp_path: Path, monkeypatch: pyt
     assert reason is not None
     assert "809853" not in (reason or "") or WILDCORE in (reason or "")
     assert "misread" in (reason or "").lower() or "rescan" in (reason or "").lower()
+
+
+@pytest.mark.skipif(not get_settings().gcd_sqlite_path.is_file(), reason="live GCD required")
+def test_stale_catalog_upc_yields_grim_ghost_not_fighting_fronts(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _patch_live_gcd(monkeypatch)
+    monkeypatch.setattr(worker, "AUTO_RESOLVE_UNIQUE_GCD_BARCODE_GAP", True)
+    _worker_mocks(tmp_path, monkeypatch, barcode=GRIM_GHOST, p105=_p105_full(GRIM_GHOST))
+    monkeypatch.setattr(
+        worker,
+        "evaluate_cover_fingerprint_vs_barcode",
+        lambda *a, **k: CoverFingerprintOutcome(False, None, None, None, False),
+    )
+    engine = _engine()
+    with Session(engine) as session:
+        session.add(User(id=1, email="a@b.com", password_hash="x"))
+        pub = CatalogPublisher(name="Wrong Pub", normalized_name="wrong pub")
+        session.add(pub)
+        session.commit()
+        series = CatalogSeries(name="Fighting Fronts", normalized_name="fighting fronts", publisher_id=int(pub.id))
+        session.add(series)
+        session.commit()
+        wrong = CatalogIssue(
+            series_id=int(series.id),
+            publisher_id=int(pub.id),
+            issue_number="3",
+            normalized_issue_number="3",
+        )
+        session.add(wrong)
+        session.commit()
+        session.refresh(wrong)
+        session.add(
+            CatalogUpc(
+                issue_id=int(wrong.id),
+                upc=GRIM_GHOST,
+                normalized_upc=GRIM_GHOST,
+                source="test",
+            )
+        )
+        session.commit()
+        intake = IntakeSession(
+            user_id=1,
+            session_token="t-stale",
+            status="active",
+            expires_at=datetime(2099, 1, 1, tzinfo=timezone.utc),
+        )
+        session.add(intake)
+        session.commit()
+        session.refresh(intake)
+        item = IntakeSessionItem(session_id=int(intake.id), user_id=1, storage_path="x.jpg", status=ITEM_QUEUED)
+        session.add(item)
+        session.commit()
+        session.refresh(item)
+        status = worker.process_intake_item(session, item_id=int(item.id))
+        session.refresh(item)
+        assert "grim ghost" in (item.matched_series or "").lower()
+        assert "fighting fronts" not in (item.matched_series or "").lower()
+        assert status in (ITEM_AUTO_MATCHED, ITEM_NEEDS_REVIEW, ITEM_READY_FOR_REVIEW)
 
 
 def test_p106_gap_sync_overrides_display() -> None:
