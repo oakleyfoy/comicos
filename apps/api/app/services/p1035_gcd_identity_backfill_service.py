@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import re
 import time
 from collections import defaultdict
@@ -127,22 +128,67 @@ def _comicvine_ids(external: dict[str, Any]) -> list[str]:
     return [str(k) for k in bucket if str(k).isdigit()]
 
 
+def catalog_issue_ids_from_p1035_resume_metadata(
+    *,
+    report: dict[str, Any],
+    rollback: dict[str, Any] | None = None,
+) -> set[int]:
+    """Issue ids already written in a prior P103.5 write (report + rollback artifact)."""
+    ids: set[int] = set()
+    for row in report.get("written_rows") or []:
+        if not isinstance(row, dict):
+            continue
+        iid = row.get("catalog_issue_id")
+        if iid is not None:
+            ids.add(int(iid))
+    for snap in (rollback or {}).get("issue_snapshots") or []:
+        if not isinstance(snap, dict):
+            continue
+        iid = snap.get("catalog_issue_id")
+        if iid is not None:
+            ids.add(int(iid))
+    return ids
+
+
 def load_resume_catalog_issue_ids(session: Session, job_id: int) -> set[int]:
     job = session.get(CatalogImportJob, job_id)
     if job is None:
         raise ValueError(f"resume job {job_id} not found")
     cfg = dict(job.config or {})
-    report = dict(cfg.get("report") or {})
-    ids: set[int] = set()
-    for row in report.get("written_rows") or []:
-        iid = row.get("catalog_issue_id")
-        if iid is not None:
-            ids.add(int(iid))
-    for snap in (cfg.get("rollback") or {}).get("issue_snapshots") or []:
-        iid = snap.get("catalog_issue_id")
-        if iid is not None:
-            ids.add(int(iid))
-    return ids
+    return catalog_issue_ids_from_p1035_resume_metadata(
+        report=dict(cfg.get("report") or {}),
+        rollback=dict(cfg.get("rollback") or {}),
+    )
+
+
+def load_resume_catalog_issue_ids_from_report_file(path: Path) -> set[int]:
+    if not path.is_file():
+        raise FileNotFoundError(f"resume report not found: {path}")
+    try:
+        raw = json.loads(path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        raise ValueError(f"resume report is not valid JSON: {path}") from exc
+    if not isinstance(raw, dict):
+        raise ValueError(f"resume report must be a JSON object: {path}")
+    if "report" in raw and isinstance(raw["report"], dict):
+        report = dict(raw["report"])
+        rollback = dict(raw["rollback"]) if isinstance(raw.get("rollback"), dict) else {}
+    else:
+        report = dict(raw)
+        rollback = dict(raw["rollback"]) if isinstance(raw.get("rollback"), dict) else {}
+    return catalog_issue_ids_from_p1035_resume_metadata(report=report, rollback=rollback)
+
+
+def resolve_p1035_resume_skip_issue_ids(session: Session, resume: str | int) -> set[int]:
+    """Resume from CatalogImportJob id or a prior write JSON artifact path."""
+    if isinstance(resume, int):
+        return load_resume_catalog_issue_ids(session, resume)
+    text = str(resume).strip()
+    if not text:
+        raise ValueError("resume job must be a job id or path to a JSON report")
+    if text.isdigit():
+        return load_resume_catalog_issue_ids(session, int(text))
+    return load_resume_catalog_issue_ids_from_report_file(Path(text))
 
 
 def build_comicvine_duplicate_index(
@@ -189,6 +235,7 @@ class P1035DryRunReport:
     sample_rows: list[dict[str, Any]] = field(default_factory=list)
     perf: dict[str, Any] | None = None
     candidate_scope: dict[str, int] | None = None
+    exceptions: dict[str, Any] | None = None
 
     def to_json(self) -> dict[str, Any]:
         payload = {
@@ -215,6 +262,8 @@ class P1035DryRunReport:
         }
         if self.candidate_scope is not None:
             payload["candidate_scope"] = self.candidate_scope
+        if self.exceptions is not None:
+            payload["exceptions"] = self.exceptions
         return payload
 
 
@@ -236,9 +285,10 @@ class P1035WriteReport:
     scanned: int = 0
     matched: int = 0
     perf: dict[str, Any] | None = None
+    exceptions: dict[str, Any] | None = None
 
     def to_json(self) -> dict[str, Any]:
-        return {
+        payload = {
             "mode": self.mode,
             "report_at": self.report_at,
             "filters": self.filters,
@@ -255,6 +305,9 @@ class P1035WriteReport:
             "matched": self.matched,
             "perf": self.perf,
         }
+        if self.exceptions is not None:
+            payload["exceptions"] = self.exceptions
+        return payload
 
 
 def _filter_missing_gcd(scope: list[EnrichmentIssueSnapshot]) -> list[EnrichmentIssueSnapshot]:
@@ -409,6 +462,7 @@ def run_p1035_identity_dryrun(
     sample_limit: int = 50,
     skip_issue_ids: set[int] | None = None,
     scope_stats: P1035CandidateScopeStats | None = None,
+    exception_collector: Any | None = None,
 ) -> P1035DryRunReport:
     t0 = time.perf_counter()
     report = P1035DryRunReport(
@@ -422,6 +476,7 @@ def run_p1035_identity_dryrun(
     ctx = CatalogCacheContext.load(cache_path)
     full_scope = load_catalog_enrichment_scope(cache_path, filters=filters)
     scope = _filter_missing_gcd(full_scope)
+    scope_by_id = {int(s.issue_id): s for s in full_scope}
     dup_index = build_comicvine_duplicate_index(full_scope)
 
     expanded = _expand_scope_for_gcd_index(scope)
@@ -447,12 +502,22 @@ def run_p1035_identity_dryrun(
 
         if _cv_duplicate_conflict(snap, dup_index):
             report.duplicate_cv_conflicts += 1
+            if exception_collector is not None:
+                from app.services.p1035_gcd_identity_exception_service import record_duplicate_cv_conflict
+
+                record_duplicate_cv_conflict(
+                    exception_collector, snap=snap, dup_index=dup_index, scope_by_id=scope_by_id
+                )
             continue
 
         gcd_row = lookup_gcd_for_catalog(gcd_index, snap)
         if gcd_row is None:
             report.skipped_no_gcd_match += 1
             report.ambiguous_skipped += 1
+            if exception_collector is not None:
+                from app.services.p1035_gcd_identity_exception_service import record_ambiguous_match
+
+                record_ambiguous_match(exception_collector, snap=snap, index=gcd_index, ctx=ctx)
             continue
 
         processed += 1
@@ -463,12 +528,51 @@ def run_p1035_identity_dryrun(
             continue
         if skip == "learned_barcode_conflict":
             report.learned_barcode_conflicts += 1
+            if exception_collector is not None:
+                from app.services.p1035_gcd_identity_exception_service import record_upc_conflict
+
+                record_upc_conflict(
+                    exception_collector,
+                    snap=snap,
+                    gcd_row=gcd_row,
+                    ctx=ctx,
+                    skip_reason="learned_barcode_conflict",
+                )
             continue
         if skip == "upc_mapped_elsewhere":
             report.upc_elsewhere_conflicts += 1
+            if exception_collector is not None:
+                from app.services.p1035_gcd_identity_exception_service import record_upc_conflict
+
+                record_upc_conflict(
+                    exception_collector,
+                    snap=snap,
+                    gcd_row=gcd_row,
+                    ctx=ctx,
+                    skip_reason="upc_mapped_elsewhere",
+                )
             continue
         if skip == "barcode_validation_failed":
             report.validation_failures += 1
+            if exception_collector is not None:
+                from app.services.p1035_gcd_identity_exception_service import record_validation_failure
+
+                inputs = _normalize_gcd_inputs(gcd_row)
+                barcode = inputs.get("barcode")
+                norm = normalize_upc(str(barcode or "")) if barcode else ""
+                validation = validate_barcode_catalog_match(
+                    norm,
+                    publisher=snap.publisher_name,
+                    issue_number=snap.issue_number,
+                    year=str(snap.year or ""),
+                )
+                record_validation_failure(
+                    exception_collector,
+                    snap=snap,
+                    gcd_row=gcd_row,
+                    validation_status=validation.status,
+                    validation_reason=validation.reason,
+                )
         report.projected_upc_inserts += upc_n
         if len(report.sample_rows) < sample_limit:
             gcd_inputs = _normalize_gcd_inputs(gcd_row)
@@ -485,6 +589,8 @@ def run_p1035_identity_dryrun(
             )
 
     report.elapsed_seconds = time.perf_counter() - t0
+    if exception_collector is not None:
+        report.exceptions = exception_collector.to_dict()
     if benchmark:
         report.perf = {"gcd_rows_loaded": gcd_index.rows_loaded, "scope_missing_gcd": len(scope)}
     return report
@@ -543,6 +649,7 @@ def run_p1035_identity_write(
     filters: EnrichmentFilters,
     rollback_collector: dict[str, Any] | None = None,
     skip_issue_ids: set[int] | None = None,
+    exception_collector: Any | None = None,
 ) -> P1035WriteReport:
     t0 = time.perf_counter()
     report = P1035WriteReport(
@@ -552,6 +659,7 @@ def run_p1035_identity_write(
     ctx = CatalogCacheContext.load(cache_path)
     full_scope = load_catalog_enrichment_scope(cache_path, filters=filters)
     scope = _filter_missing_gcd(full_scope)
+    scope_by_id = {int(s.issue_id): s for s in full_scope}
     dup_index = build_comicvine_duplicate_index(full_scope)
     expanded = _expand_scope_for_gcd_index(scope)
     gcd_index = load_gcd_index_for_enrichment(
@@ -579,11 +687,21 @@ def run_p1035_identity_write(
         if _cv_duplicate_conflict(snap, dup_index):
             report.duplicate_cv_conflicts += 1
             report.skipped_conflicts += 1
+            if exception_collector is not None:
+                from app.services.p1035_gcd_identity_exception_service import record_duplicate_cv_conflict
+
+                record_duplicate_cv_conflict(
+                    exception_collector, snap=snap, dup_index=dup_index, scope_by_id=scope_by_id
+                )
             continue
 
         gcd_row = lookup_gcd_for_catalog(gcd_index, snap)
         if gcd_row is None:
             report.ambiguous_skipped += 1
+            if exception_collector is not None:
+                from app.services.p1035_gcd_identity_exception_service import record_ambiguous_match
+
+                record_ambiguous_match(exception_collector, snap=snap, index=gcd_index, ctx=ctx)
             continue
 
         report.matched += 1
@@ -591,12 +709,51 @@ def run_p1035_identity_write(
         if skip == "learned_barcode_conflict":
             report.skipped_conflicts += 1
             report.learned_barcode_conflicts += 1
+            if exception_collector is not None:
+                from app.services.p1035_gcd_identity_exception_service import record_upc_conflict
+
+                record_upc_conflict(
+                    exception_collector,
+                    snap=snap,
+                    gcd_row=gcd_row,
+                    ctx=ctx,
+                    skip_reason="learned_barcode_conflict",
+                )
             continue
         if skip == "upc_mapped_elsewhere":
             report.skipped_conflicts += 1
+            if exception_collector is not None:
+                from app.services.p1035_gcd_identity_exception_service import record_upc_conflict
+
+                record_upc_conflict(
+                    exception_collector,
+                    snap=snap,
+                    gcd_row=gcd_row,
+                    ctx=ctx,
+                    skip_reason="upc_mapped_elsewhere",
+                )
             continue
         if skip == "barcode_validation_failed":
             report.validation_failures += 1
+            if exception_collector is not None:
+                from app.services.p1035_gcd_identity_exception_service import record_validation_failure
+
+                inputs = _normalize_gcd_inputs(gcd_row)
+                barcode = inputs.get("barcode")
+                norm = normalize_upc(str(barcode or "")) if barcode else ""
+                validation = validate_barcode_catalog_match(
+                    norm,
+                    publisher=snap.publisher_name,
+                    issue_number=snap.issue_number,
+                    year=str(snap.year or ""),
+                )
+                record_validation_failure(
+                    exception_collector,
+                    snap=snap,
+                    gcd_row=gcd_row,
+                    validation_status=validation.status,
+                    validation_reason=validation.reason,
+                )
         if not planned:
             report.skipped_no_updates += 1
             continue
@@ -657,4 +814,6 @@ def run_p1035_identity_write(
 
     session.commit()
     report.perf = {"elapsed_sec": round(time.perf_counter() - t0, 3)}
+    if exception_collector is not None:
+        report.exceptions = exception_collector.to_dict()
     return report

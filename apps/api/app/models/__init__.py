@@ -503,6 +503,7 @@ from app.models.intake_queue import (
     IntakeSessionItem,
 )
 from app.models.p105_barcode_repair import P105MissingBarcodeQueue
+from app.models.p106_barcode_gap import BarcodeGapResolutionQueue
 from app.models.marketplace_acquisition import MarketplaceAcquisitionCandidate, MarketplaceSource
 from app.models.release_watchlist import (
     CollectionContinuityAlert,

@@ -60,9 +60,17 @@ function isVerifiedLocalBarcodeMatch(item: IntakeItem): boolean {
   return isLocalCatalogBarcodeMatch(item);
 }
 
+function intakeBarcodeGap(item: IntakeItem): Record<string, unknown> | null {
+  const gap = item.barcode_read?.barcode_gap;
+  return gap && typeof gap === "object" ? (gap as Record<string, unknown>) : null;
+}
+
 function intakeHeadline(item: IntakeItem): string {
-  const series = item.matched_series?.trim();
-  const num = item.matched_issue_number?.trim();
+  const gap = intakeBarcodeGap(item);
+  const gapSeries = typeof gap?.gcd_series === "string" ? gap.gcd_series.trim() : "";
+  const gapNum = typeof gap?.gcd_issue_number === "string" ? gap.gcd_issue_number.trim() : "";
+  const series = item.matched_series?.trim() || gapSeries;
+  const num = item.matched_issue_number?.trim() || gapNum;
   if (series) {
     return [series, num ? `#${num.replace(/^#/, "")}` : null].filter(Boolean).join(" ");
   }
@@ -71,7 +79,10 @@ function intakeHeadline(item: IntakeItem): string {
 
 function intakeSubtitle(item: IntakeItem): string {
   const parts: string[] = [];
-  const pub = item.matched_publisher?.trim();
+  const gap = intakeBarcodeGap(item);
+  const pub =
+    item.matched_publisher?.trim() ||
+    (typeof gap?.gcd_publisher === "string" ? gap.gcd_publisher.trim() : "");
   if (pub) parts.push(pub);
   if (item.matched_year?.trim()) parts.push(item.matched_year.trim());
   return parts.join(" · ");
@@ -123,6 +134,12 @@ function intakeUserReason(item: IntakeItem): string | null {
   }
   if (raw.startsWith("No catalog or ComicVine match")) {
     return "No match in catalog yet — import from ComicVine or search manually.";
+  }
+  if (raw.startsWith("Not in your catalog yet") && raw.includes("GCD match found")) {
+    return raw;
+  }
+  if (raw.startsWith("Not in your catalog yet") && raw.includes("ready to auto-import from GCD")) {
+    return raw;
   }
   if (raw.startsWith("Not in your catalog yet")) {
     return raw;
@@ -322,11 +339,14 @@ export function IntakeReviewPage(): JSX.Element {
             item.status === "ready_for_review" ||
             item.status === "needs_review" ||
             item.status === "auto_matched";
+          const gap = intakeBarcodeGap(item);
+          const gapAutoImport =
+            gap?.action === "auto_import_available" || gap?.ready_to_auto_import === true;
           const canImport =
             !canConfirm &&
             reviewable &&
             item.status !== "auto_matched" &&
-            (item.matched_series != null || item.normalized_barcode != null);
+            (item.matched_series != null || item.normalized_barcode != null || gapAutoImport);
           return (
             <article key={item.id} className="flex gap-3 rounded-xl border border-slate-800 bg-slate-900/60 p-3">
               <img
@@ -365,6 +385,11 @@ export function IntakeReviewPage(): JSX.Element {
                 item.barcode_read.decoded_supplement !== item.barcode_read.final_supplement ? (
                   <p className="mt-1 text-xs text-amber-300/90">
                     Barcode and printed supplement disagree — confirm before adding.
+                  </p>
+                ) : null}
+                {gapAutoImport && !canConfirm ? (
+                  <p className="mt-2 text-sm text-indigo-200/90">
+                    GCD barcode match — use Import &amp; Accept to add to your catalog.
                   </p>
                 ) : null}
                 {intakeUserReason(item) ? (

@@ -630,11 +630,60 @@ def _resolve_imported_issue_id(
 def import_and_accept_intake_item(
     session: Session, *, item_id: int, owner_user_id: int
 ) -> IntakeSessionItem:
-    """Import the ComicVine volume/issue into the local catalog, link it, accept, and learn the barcode."""
+    """Import into catalog (GCD barcode gap first, else ComicVine), link, accept, and learn the barcode."""
     item = _load_owned_item(session, item_id=item_id, owner_user_id=owner_user_id)
     if item.selected_catalog_issue_id is not None:
         # Already resolvable locally — just confirm it.
         return accept_intake_item(session, item_id=item_id, owner_user_id=owner_user_id)
+
+    if item.normalized_barcode:
+        from app.services.gcd_catalog_import_dashboard_service import resolve_cache_path, resolve_gcd_path
+        from app.services.p106_barcode_gap_resolver_service import resolve_barcode_gap
+
+        try:
+            gap = resolve_barcode_gap(
+                session,
+                barcode=item.normalized_barcode,
+                gcd_path=resolve_gcd_path(None),
+                cache_path=resolve_cache_path(None),
+                confirm_write=True,
+                intake_item_id=int(item.id or 0),
+            )
+            result = gap.get("result") or {}
+            catalog_issue_id = result.get("catalog_issue_id")
+            if gap.get("written") and catalog_issue_id is not None:
+                issue_id = int(catalog_issue_id)
+                identity = load_catalog_issue_identity(session, issue_id)
+                item.selected_catalog_issue_id = issue_id
+                if identity is not None:
+                    item.matched_publisher = identity.publisher
+                    item.matched_series = identity.series
+                    item.matched_issue_number = identity.issue_number
+                    item.cover_url = identity.cover_image_url or item.cover_url
+                item.match_source = "gcd_barcode_gap"
+                session.add(item)
+                session.flush()
+                _attach_intake_barcode_repair(
+                    session,
+                    item=item,
+                    catalog_issue_id=issue_id,
+                    variant_id=item.selected_variant_id,
+                    user_id=owner_user_id,
+                    learned_source=MATCH_SOURCE_LEARNED,
+                    catalog_upc_source=CATALOG_UPC_SOURCE_LEARNED,
+                )
+                session.commit()
+                _reprocess_intake_item_sync(session, item_id=int(item.id or 0))
+                session.refresh(item)
+                logger.info(
+                    "intake.import.gcd_barcode_gap item_id=%s issue_id=%s barcode=%s",
+                    item.id,
+                    issue_id,
+                    item.normalized_barcode,
+                )
+                return item
+        except Exception:
+            logger.debug("intake.import.gcd_barcode_gap_failed item_id=%s", item.id, exc_info=True)
 
     from app.services.catalog_ingestion_service import catalog_series_id_for_comicvine_volume
     from app.services.comicvine_catalog_importer import ComicVineCatalogImporter

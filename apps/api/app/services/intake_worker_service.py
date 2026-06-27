@@ -7,6 +7,9 @@ phone scanner never blocks. Identification order favors instant/high-confidence 
     2. Local catalog UPC table (``catalog_upc``).
     3. ComicVine on-demand lookup (needs review before inventory).
 
+Local catalog misses trigger P106 GCD barcode lookup before ComicVine. Unique exact GCD
+matches may auto-import/attach so the scanner never shows a blank identity.
+
 Every candidate is run through safe-match validation so we never auto-match the wrong book.
 """
 
@@ -77,6 +80,9 @@ from app.services.photo_import_storage_service import resolve_photo_import_stora
 from app.services.recognition.catalog_matcher import load_catalog_issue_identity
 
 logger = logging.getLogger(__name__)
+
+# Unique exact GCD barcode hits auto-resolve during scan (no manual CLI).
+AUTO_RESOLVE_UNIQUE_GCD_BARCODE_GAP = True
 
 COVER_FINGERPRINT_AGREE_SCORE = 70.0
 # Recognition images below this long edge are too small for barcode OCR/fingerprint.
@@ -200,9 +206,8 @@ def _candidate_if_valid(barcode: str, cand: dict[str, Any] | None) -> dict[str, 
     return work
 
 
-def _resolve_candidate(session: Session, *, barcode: str) -> dict[str, Any] | None:
-    """Find the best identification candidate that is consistent with the full barcode."""
-    # 1. Learned barcode map — instant, from a prior user accept.
+def _resolve_local_catalog_candidate(session: Session, *, barcode: str) -> dict[str, Any] | None:
+    """Learned barcode map and catalog_upc only (no ComicVine, no GCD)."""
     learned = session.exec(
         select(ComicIssueBarcode).where(ComicIssueBarcode.normalized_barcode == barcode)
     ).first()
@@ -219,7 +224,6 @@ def _resolve_candidate(session: Session, *, barcode: str) -> dict[str, Any] | No
             valid["learned_row"] = learned
             return valid
 
-    # 2. Local catalog UPC table (longest key first; never base-only for direct market).
     for key in comic_barcode_lookup_keys_for_search(barcode):
         if len(key) < 17 and direct_market_requires_supplement_key(barcode):
             continue
@@ -236,8 +240,10 @@ def _resolve_candidate(session: Session, *, barcode: str) -> dict[str, Any] | No
         if valid is not None:
             valid["confidence"] = 0.97
             return valid
+    return None
 
-    # 3. ComicVine on-demand (needs review before inventory).
+
+def _resolve_comicvine_candidate(session: Session, *, barcode: str) -> dict[str, Any] | None:
     cv = lookup_comicvine_by_barcode(barcode)
     if cv and cv.get("matched"):
         cover_date = str(cv.get("cover_date") or "")
@@ -256,6 +262,48 @@ def _resolve_candidate(session: Session, *, barcode: str) -> dict[str, Any] | No
         if valid is not None:
             return valid
     return None
+
+
+def _resolve_candidate(session: Session, *, barcode: str) -> dict[str, Any] | None:
+    """Local catalog first, then ComicVine (used when P106 does not resolve)."""
+    local = _resolve_local_catalog_candidate(session, barcode=barcode)
+    if local is not None:
+        return local
+    return _resolve_comicvine_candidate(session, barcode=barcode)
+
+
+def _scanner_gap_finish_reason(diagnosis: dict[str, Any]) -> str:
+    if diagnosis.get("ready_to_auto_import"):
+        return "Not in your catalog yet — GCD match found (Import & Accept to add)."
+    if diagnosis.get("status") in {"review_required", "conflict"}:
+        return "GCD barcode match needs review — pick the issue or use Import & Accept."
+    if int(diagnosis.get("gcd_match_count") or 0) == 0:
+        return "Not in your catalog yet — use Import & Accept (ComicVine) or pick the issue."
+    return "Not in your catalog yet — use Import & Accept or pick the issue."
+
+
+def _log_scanner_barcode_gap(
+    *,
+    item_id: int,
+    scanner_barcode: str,
+    local_catalog_hit: bool,
+    p106_called: bool,
+    diagnosis: dict[str, Any] | None,
+    final_scanner_status: str,
+) -> None:
+    diag = diagnosis or {}
+    logger.info(
+        "intake.scanner.barcode_gap item_id=%s scanner_barcode=%s local_catalog_hit=%s "
+        "p106_called=%s p106_status=%s p106_gcd_issue_id=%s p106_catalog_issue_id=%s final_scanner_status=%s",
+        item_id,
+        scanner_barcode,
+        local_catalog_hit,
+        p106_called,
+        diag.get("status"),
+        diag.get("gcd_issue_id"),
+        diag.get("catalog_issue_id"),
+        final_scanner_status,
+    )
 
 
 def _cover_confirms_barcode_match(
@@ -404,19 +452,77 @@ def process_intake_item(session: Session, *, item_id: int) -> str:
                 reason=f"Read base UPC {item.base_upc} but not the 5-digit supplement (ambiguous).",
             )
 
-        candidate = _resolve_candidate(session, barcode=normalized)
+        candidate = _resolve_local_catalog_candidate(session, barcode=normalized)
+        local_catalog_hit = candidate is not None
+        gap_diag: dict[str, Any] | None = None
+        p106_called = False
+
         if candidate is None:
             from app.services.p105_barcode_repair_service import record_missing_barcode_queue
+            from app.services.gcd_catalog_import_dashboard_service import resolve_cache_path, resolve_gcd_path
+            from app.services.p106_barcode_gap_resolver_service import (
+                apply_barcode_gap_display_to_intake_item,
+                diagnose_barcode_gap,
+                merge_barcode_gap_into_barcode_read,
+                resolve_barcode_gap,
+                should_auto_resolve_barcode_gap_on_scan,
+            )
 
             record_missing_barcode_queue(session, item=item)
-            session.add(item)
-            session.flush()
-            return _finish(
-                session,
-                item,
-                status=ITEM_NEEDS_REVIEW,
-                reason="Not in your catalog yet — use Import & Accept or pick the issue.",
-            )
+            p106_called = True
+            try:
+                gap_diag = diagnose_barcode_gap(
+                    session,
+                    barcode=normalized,
+                    gcd_path=resolve_gcd_path(None),
+                    cache_path=resolve_cache_path(None),
+                )
+                item.barcode_read_json = merge_barcode_gap_into_barcode_read(
+                    item.barcode_read_json,
+                    gap_diag,
+                )
+                apply_barcode_gap_display_to_intake_item(item, gap_diag)
+            except Exception:
+                logger.warning("p106.barcode_gap.diagnose_failed item_id=%s", item_id, exc_info=True)
+                gap_diag = None
+
+            if gap_diag and AUTO_RESOLVE_UNIQUE_GCD_BARCODE_GAP and should_auto_resolve_barcode_gap_on_scan(gap_diag):
+                try:
+                    resolve_barcode_gap(
+                        session,
+                        barcode=normalized,
+                        gcd_path=resolve_gcd_path(None),
+                        cache_path=resolve_cache_path(None),
+                        confirm_write=True,
+                        intake_item_id=int(item.id or 0),
+                    )
+                    candidate = _resolve_local_catalog_candidate(session, barcode=normalized)
+                    local_catalog_hit = candidate is not None
+                except Exception:
+                    logger.warning(
+                        "p106.barcode_gap.auto_resolve_failed item_id=%s barcode=%s",
+                        item_id,
+                        normalized,
+                        exc_info=True,
+                    )
+
+            if candidate is None and (gap_diag is None or int(gap_diag.get("gcd_match_count") or 0) == 0):
+                candidate = _resolve_comicvine_candidate(session, barcode=normalized)
+
+            if candidate is None:
+                gap_reason = _scanner_gap_finish_reason(gap_diag or {})
+                session.add(item)
+                session.flush()
+                final_status = ITEM_NEEDS_REVIEW
+                _log_scanner_barcode_gap(
+                    item_id=item_id,
+                    scanner_barcode=normalized,
+                    local_catalog_hit=local_catalog_hit,
+                    p106_called=p106_called,
+                    diagnosis=gap_diag,
+                    final_scanner_status=final_status,
+                )
+                return _finish(session, item, status=final_status, reason=gap_reason)
 
         if local_full_barcode and barcode_catalog_identity_conflict(session, normalized):
             return _finish(

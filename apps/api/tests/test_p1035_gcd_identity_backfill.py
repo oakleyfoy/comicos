@@ -19,8 +19,12 @@ from app.services.p103_gcd_enrichment_helpers import extract_gcd_issue_id, gcd_r
 from app.services.p1035_gcd_identity_backfill_service import (
     analyze_p1035_candidate_scope,
     build_comicvine_duplicate_index,
+    catalog_issue_ids_from_p1035_resume_metadata,
+    load_resume_catalog_issue_ids,
+    load_resume_catalog_issue_ids_from_report_file,
     lookup_gcd_for_catalog,
     plan_identity_backfill,
+    resolve_p1035_resume_skip_issue_ids,
     run_p1035_identity_write,
 )
 from app.services.p103_gcd_enrichment_fast import load_catalog_enrichment_scope
@@ -469,3 +473,82 @@ def test_publisher_dc_matches_dc_comics(tmp_path: Path) -> None:
     filters = EnrichmentFilters(publisher="DC", year_from=2018, year_to=2018, all_catalog=False, year_filter_explicit=True)
     stats = analyze_p1035_candidate_scope(cache_path, filters)
     assert stats.after_publisher_filter == 1
+
+
+def test_resume_skip_ids_from_integer_job_id(session: Session) -> None:
+    job = CatalogImportJob(
+        source=GCD_SOURCE,
+        job_type="gcd_identity_backfill_write",
+        status="completed",
+        config={
+            "report": {"written_rows": [{"catalog_issue_id": 10}, {"catalog_issue_id": 11}]},
+            "rollback": {"issue_snapshots": [{"catalog_issue_id": 12}]},
+        },
+        started_at=utc_now(),
+        created_at=utc_now(),
+    )
+    session.add(job)
+    session.commit()
+    assert job.id is not None
+    ids = resolve_p1035_resume_skip_issue_ids(session, int(job.id))
+    assert ids == {10, 11, 12}
+    assert load_resume_catalog_issue_ids(session, int(job.id)) == ids
+
+
+def test_resume_skip_ids_from_json_report_path(session: Session, tmp_path: Path) -> None:
+    report_path = tmp_path / "prior_write.json"
+    report_path.write_text(
+        json.dumps(
+            {
+                "report": {"written_rows": [{"catalog_issue_id": 501}, {"catalog_issue_id": 502}]},
+                "rollback": {"issue_snapshots": [{"catalog_issue_id": 503}]},
+            }
+        ),
+        encoding="utf-8",
+    )
+    ids = load_resume_catalog_issue_ids_from_report_file(report_path)
+    assert ids == {501, 502, 503}
+    assert resolve_p1035_resume_skip_issue_ids(session, str(report_path)) == ids
+
+
+def test_resume_skip_ids_json_path_matches_job_metadata(session: Session, tmp_path: Path) -> None:
+    rollback = {"issue_snapshots": [{"catalog_issue_id": 99, "identity_only": True}]}
+    report = {"written_rows": [{"catalog_issue_id": 88, "gcd_issue_id": 1}]}
+    job = CatalogImportJob(
+        source=GCD_SOURCE,
+        job_type="gcd_identity_backfill_write",
+        status="completed",
+        config={"report": report, "rollback": rollback},
+        started_at=utc_now(),
+        created_at=utc_now(),
+    )
+    session.add(job)
+    session.commit()
+    path = tmp_path / "write.json"
+    path.write_text(json.dumps({"report": report, "rollback": rollback}), encoding="utf-8")
+    from_job = resolve_p1035_resume_skip_issue_ids(session, int(job.id or 0))
+    from_file = resolve_p1035_resume_skip_issue_ids(session, str(path))
+    assert from_job == from_file == {88, 99}
+
+
+def test_resume_report_file_not_found(session: Session, tmp_path: Path) -> None:
+    missing = tmp_path / "nope.json"
+    try:
+        load_resume_catalog_issue_ids_from_report_file(missing)
+        assert False, "expected FileNotFoundError"
+    except FileNotFoundError as exc:
+        assert "nope.json" in str(exc)
+
+
+def test_resume_report_malformed_json(session: Session, tmp_path: Path) -> None:
+    bad = tmp_path / "bad.json"
+    bad.write_text("{not json", encoding="utf-8")
+    try:
+        load_resume_catalog_issue_ids_from_report_file(bad)
+        assert False, "expected ValueError"
+    except ValueError as exc:
+        assert "valid JSON" in str(exc)
+
+
+def test_catalog_issue_ids_from_resume_metadata_empty_report() -> None:
+    assert catalog_issue_ids_from_p1035_resume_metadata(report={}, rollback={}) == set()
