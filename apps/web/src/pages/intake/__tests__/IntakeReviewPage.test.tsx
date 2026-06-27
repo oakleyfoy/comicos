@@ -98,7 +98,7 @@ describe("IntakeReviewPage", () => {
       ],
     });
     renderReview();
-    expect(await screen.findByText("Barcode matched local catalog.")).toBeInTheDocument();
+    expect(await screen.findByText("Barcode verified against local catalog.")).toBeInTheDocument();
     expect(screen.getByText(/Printed supplement OCR read issue #19/)).toBeInTheDocument();
     expect(screen.queryByText(/Barcode and printed supplement disagree/)).not.toBeInTheDocument();
   });

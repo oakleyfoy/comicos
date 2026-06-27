@@ -56,6 +56,10 @@ function isLocalCatalogBarcodeMatch(item: IntakeItem): boolean {
   );
 }
 
+function isVerifiedLocalBarcodeMatch(item: IntakeItem): boolean {
+  return isLocalCatalogBarcodeMatch(item);
+}
+
 function intakeHeadline(item: IntakeItem): string {
   const series = item.matched_series?.trim();
   const num = item.matched_issue_number?.trim();
@@ -75,10 +79,13 @@ function intakeSubtitle(item: IntakeItem): string {
 
 function intakeInfoMessage(item: IntakeItem): Array<{ tone: "success" | "info" | "warn"; text: string }> {
   const lines: Array<{ tone: "success" | "info" | "warn"; text: string }> = [];
-  if (isLocalCatalogBarcodeMatch(item)) {
-    lines.push({ tone: "success", text: "Barcode matched local catalog." });
+  if (isVerifiedLocalBarcodeMatch(item)) {
+    lines.push({ tone: "success", text: "Barcode verified against local catalog." });
     const note = item.reason?.trim();
     if (note && /printed supplement OCR/i.test(note)) {
+      lines.push({ tone: "info", text: note });
+    }
+    if (note && /Cover fingerprint favors another issue/i.test(note)) {
       lines.push({ tone: "info", text: note });
     }
     return lines;
@@ -90,12 +97,18 @@ function intakeInfoMessage(item: IntakeItem): Array<{ tone: "success" | "info" |
 }
 
 function intakeUserReason(item: IntakeItem): string | null {
-  if (isLocalCatalogBarcodeMatch(item)) {
+  if (isVerifiedLocalBarcodeMatch(item)) {
     return null;
   }
   const raw = item.reason?.trim();
   if (!raw) return null;
   if (/printed supplement OCR/i.test(raw)) {
+    return null;
+  }
+  if (/Cover fingerprint favors another issue/i.test(raw)) {
+    return null;
+  }
+  if (/Cover fingerprint strongly suggests/i.test(raw) && item.status === "auto_matched") {
     return null;
   }
   if (raw.startsWith("Match failed validation: ")) {

@@ -432,7 +432,6 @@ def test_worker_catalog_upc_auto_matched_despite_ocr_disagreement(
         jpeg = _fake_jpeg(tmp_path)
         _patch_p105(monkeypatch)
         monkeypatch.setattr(worker, "resolve_photo_import_storage_path", lambda *a, **k: __import__("pathlib").Path(jpeg))
-        monkeypatch.setattr(worker, "cover_contradicts_local_barcode", lambda *a, **k: (False, ""))
 
         result = worker.process_intake_item(session, item_id=int(item.id))
 

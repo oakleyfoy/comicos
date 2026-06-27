@@ -62,9 +62,15 @@ from app.services.p105_barcode_repair_service import (
     intake_repair_learned_source,
     resolve_missing_barcode_queue,
 )
+from app.services.intake_barcode_confidence import (
+    evaluate_cover_fingerprint_vs_barcode,
+    is_validated_full_upc_exact_match,
+    log_barcode_fingerprint_user_resolution,
+)
 from app.services.photo_import_storage_service import (
     REPO_ROOT,
     relative_path_under_repo_root,
+    resolve_photo_import_storage_path,
 )
 from app.services.recognition.catalog_matcher import load_catalog_issue_identity
 
@@ -333,6 +339,54 @@ def _load_owned_item(session: Session, *, item_id: int, owner_user_id: int) -> I
     return item
 
 
+def _log_user_fingerprint_resolution(
+    session: Session,
+    *,
+    item: IntakeSessionItem,
+    chosen_catalog_issue_id: int,
+    user_action: str,
+) -> None:
+    if not item.normalized_barcode:
+        return
+    try:
+        image_path = resolve_photo_import_storage_path(item.storage_path, image_id=int(item.id or 0))
+        if not image_path.is_file():
+            return
+        identity = load_catalog_issue_identity(session, chosen_catalog_issue_id)
+        if identity is None:
+            return
+        from app.models.catalog_master import CatalogIssue
+
+        issue = session.get(CatalogIssue, chosen_catalog_issue_id)
+        year = str(issue.cover_date.year) if issue is not None and issue.cover_date else ""
+        strong = is_validated_full_upc_exact_match(
+            item.normalized_barcode,
+            publisher=identity.publisher,
+            issue_number=identity.issue_number,
+            year=year,
+        )
+        outcome = evaluate_cover_fingerprint_vs_barcode(
+            session,
+            image_path=image_path,
+            catalog_issue_id=chosen_catalog_issue_id,
+            barcode_validation_strong=strong,
+            intake_item_id=int(item.id) if item.id is not None else None,
+            final_issue_id=chosen_catalog_issue_id,
+        )
+        if not outcome.disagrees:
+            return
+        log_barcode_fingerprint_user_resolution(
+            intake_item_id=int(item.id or 0),
+            barcode_issue_id=chosen_catalog_issue_id,
+            fingerprint_issue_id=outcome.fingerprint_issue_id,
+            fingerprint_confidence=outcome.fingerprint_confidence,
+            chosen_issue_id=chosen_catalog_issue_id,
+            user_action=user_action,
+        )
+    except Exception:
+        logger.debug("intake.fingerprint.user_resolution_skip item_id=%s", item.id, exc_info=True)
+
+
 def _attach_intake_barcode_repair(
     session: Session,
     *,
@@ -400,6 +454,12 @@ def accept_intake_item(session: Session, *, item_id: int, owner_user_id: int) ->
         learned_source=intake_repair_learned_source(item.match_source),
     )
     session.commit()
+    _log_user_fingerprint_resolution(
+        session,
+        item=item,
+        chosen_catalog_issue_id=int(item.selected_catalog_issue_id),
+        user_action="accept",
+    )
     _reprocess_intake_item_sync(session, item_id=int(item.id or 0))
     session.refresh(item)
     return item
@@ -436,6 +496,12 @@ def choose_intake_item_issue(
         learned_source=MATCH_SOURCE_MANUAL,
     )
     session.commit()
+    _log_user_fingerprint_resolution(
+        session,
+        item=item,
+        chosen_catalog_issue_id=catalog_issue_id,
+        user_action="choose_issue",
+    )
     _reprocess_intake_item_sync(session, item_id=int(item.id or 0))
     session.refresh(item)
     return item

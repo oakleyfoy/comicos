@@ -54,9 +54,13 @@ from app.services.catalog_ingestion_service import (
 )
 from app.services.intake_barcode_confidence import (
     barcode_catalog_identity_conflict,
-    cover_contradicts_local_barcode,
+    combine_info_notes,
+    evaluate_cover_fingerprint_vs_barcode,
+    fingerprint_note_from_outcome,
     has_full_direct_market_barcode,
     is_local_trusted_match_source,
+    is_validated_full_upc_exact_match,
+    log_barcode_fingerprint_user_resolution,
     ocr_barcode_info_note,
 )
 from app.services.p100_barcode_extraction_service import extract_barcode_from_image
@@ -259,17 +263,28 @@ def _cover_confirms_barcode_match(
     *,
     image_path: Path,
     catalog_issue_id: int,
+    barcode_validation_strong: bool,
+    intake_item_id: int | None = None,
 ) -> tuple[bool, str]:
+    outcome = evaluate_cover_fingerprint_vs_barcode(
+        session,
+        image_path=image_path,
+        catalog_issue_id=catalog_issue_id,
+        barcode_validation_strong=barcode_validation_strong,
+        intake_item_id=intake_item_id,
+        final_issue_id=catalog_issue_id,
+    )
+    if outcome.blocks_auto_match:
+        return False, outcome.info_message or "Cover fingerprint overrides weak barcode match."
     score = fingerprint_match_score_for_crop_path(
         session, crop_path=image_path, catalog_issue_id=catalog_issue_id
     )
     if score >= COVER_FINGERPRINT_AGREE_SCORE:
         return True, f"Cover fingerprint agrees ({score:.0f}%)."
-    hits = search_catalog_fingerprint_hits_for_crop_path(session, crop_path=image_path, limit=1)
-    if hits and int(hits[0].issue_id) != int(catalog_issue_id):
+    if outcome.disagrees and outcome.fingerprint_confidence is not None:
         return (
             False,
-            f"Cover fingerprint points to a different issue (top score {hits[0].confidence:.0%}) "
+            f"Cover fingerprint points to a different issue (top score {outcome.fingerprint_confidence:.0%}) "
             f"than barcode match #{catalog_issue_id} (cover score {score:.0f}%).",
         )
     return False, f"Low cover fingerprint confidence ({score:.0f}%) for barcode match."
@@ -451,33 +466,57 @@ def process_intake_item(session: Session, *, item_id: int) -> str:
             session.add(learned_row)
 
         catalog_issue_id = candidate.get("catalog_issue_id")
+        barcode_strong = is_validated_full_upc_exact_match(
+            normalized,
+            publisher=candidate.get("publisher"),
+            issue_number=candidate.get("issue_number"),
+            year=candidate.get("year"),
+        )
         local_trusted = (
             local_full_barcode
             and is_local_trusted_match_source(str(candidate.get("source")))
             and catalog_issue_id is not None
+            and barcode_strong
         )
 
         info_note = ""
-        if local_trusted:
+        if local_trusted or (
+            catalog_issue_id is not None
+            and str(candidate.get("source")) in {MATCH_SOURCE_CATALOG_UPC, MATCH_SOURCE_LEARNED}
+        ):
             ocr_supp = p105.ocr_supplement or p105.left_supplement_ocr or ""
-            info_note = ocr_barcode_info_note(
+            ocr_note = ocr_barcode_info_note(
                 normalized_barcode=normalized,
                 ocr_supplement=ocr_supp,
                 matched_series=candidate.get("series"),
                 matched_issue_number=candidate.get("issue_number"),
-            ) or ""
-            blocked, cover_msg = cover_contradicts_local_barcode(
+            )
+            fp_outcome = evaluate_cover_fingerprint_vs_barcode(
                 session,
                 image_path=abs_path,
                 catalog_issue_id=int(catalog_issue_id),
+                barcode_validation_strong=barcode_strong,
+                intake_item_id=int(item.id) if item.id is not None else None,
+                final_issue_id=int(catalog_issue_id),
             )
-            if blocked:
-                return _finish(session, item, status=ITEM_NEEDS_REVIEW, reason=cover_msg)
+            if fp_outcome.blocks_auto_match:
+                return _finish(
+                    session,
+                    item,
+                    status=ITEM_NEEDS_REVIEW,
+                    reason=fp_outcome.info_message,
+                )
+            info_note = combine_info_notes(
+                ocr_note,
+                fingerprint_note_from_outcome(fp_outcome) if barcode_strong else None,
+            ) or ""
         elif catalog_issue_id is not None and candidate["source"] == MATCH_SOURCE_CATALOG_UPC:
             cover_ok, cover_reason = _cover_confirms_barcode_match(
                 session,
                 image_path=abs_path,
                 catalog_issue_id=int(catalog_issue_id),
+                barcode_validation_strong=barcode_strong,
+                intake_item_id=int(item.id) if item.id is not None else None,
             )
             if not cover_ok:
                 item.confidence = min(item.confidence, 0.75)
