@@ -29,6 +29,8 @@ from app.models.p82_p84_collector_expansion import (
     CollectionValuationSnapshot,
     MarketplaceAcquisitionOpportunity,
 )
+from app.models.grade_before_sell import GradeBeforeSellRecommendation
+from app.models.hold_sell_intelligence import HoldSellRecommendation
 from app.models.p88_marketplace_listing import P88MarketplaceListing
 from app.schemas.p85_production_hardening import (
     P85CollectorHomeActionRead,
