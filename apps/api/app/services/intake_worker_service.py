@@ -80,6 +80,7 @@ from app.services.photo_import_storage_service import resolve_photo_import_stora
 from app.services.recognition.catalog_matcher import load_catalog_issue_identity
 from app.services.scanner_barcode_field_test_service import (
     ScannerBarcodeResolutionTrace,
+    log_scanner_p106_gcd_miss,
     probe_local_barcode_hits,
     record_scanner_barcode_resolution,
 )
@@ -301,8 +302,33 @@ def _scanner_gap_finish_reason(diagnosis: dict[str, Any]) -> str:
     if diagnosis.get("status") in {"review_required", "conflict"}:
         return "GCD barcode match needs review — pick the issue or use Import & Accept."
     if int(diagnosis.get("gcd_match_count") or 0) == 0:
+        if int(diagnosis.get("gcd_sql_exact_barcode_column_count") or 0) > 0:
+            return "GCD barcode exists in database but P106 could not attach — use Import & Accept or ops review."
         return "Not in your catalog yet — use Import & Accept (ComicVine) or pick the issue."
     return "Not in your catalog yet — use Import & Accept or pick the issue."
+
+
+def _apply_p106_diagnosis_to_intake_item(item: IntakeSessionItem, *, gap_diag: dict[str, Any]) -> None:
+    from app.services.p106_barcode_gap_resolver_service import (
+        apply_barcode_gap_display_to_intake_item,
+        merge_barcode_gap_into_barcode_read,
+    )
+
+    item.barcode_read_json = merge_barcode_gap_into_barcode_read(item.barcode_read_json, gap_diag)
+    apply_barcode_gap_display_to_intake_item(item, gap_diag)
+
+
+def _gcd_has_exact_barcode_authority(gcd_path: Path, normalized: str) -> bool:
+    from app.services.gcd_barcode_search_service import find_gcd_rows_by_normalized_barcode
+
+    if not gcd_path.is_file():
+        return False
+    lookup_key = normalize_scan_preserving_supplement(normalized) or normalize_upc(normalized)
+    return bool(find_gcd_rows_by_normalized_barcode(gcd_path, lookup_key))
+
+
+def _p106_reports_no_gcd_match(gap_diag: dict[str, Any] | None) -> bool:
+    return gap_diag is None or int(gap_diag.get("gcd_match_count") or 0) == 0
 
 
 def _cover_confirms_barcode_match(
@@ -461,14 +487,14 @@ def process_intake_item(session: Session, *, item_id: int) -> str:
         candidate = _resolve_local_catalog_candidate(session, barcode=normalized)
         local_catalog_hit = candidate is not None
         gap_diag: dict[str, Any] | None = None
+        gap_diag_error: str | None = None
+        p106_exact_barcode_authority = False
 
         if candidate is None:
             from app.services.p105_barcode_repair_service import record_missing_barcode_queue
             from app.services.gcd_catalog_import_dashboard_service import resolve_cache_path, resolve_gcd_path
             from app.services.p106_barcode_gap_resolver_service import (
-                apply_barcode_gap_display_to_intake_item,
                 diagnose_barcode_gap,
-                merge_barcode_gap_into_barcode_read,
                 resolve_barcode_gap,
                 should_auto_resolve_barcode_gap_on_scan,
             )
@@ -476,22 +502,72 @@ def process_intake_item(session: Session, *, item_id: int) -> str:
             record_missing_barcode_queue(session, item=item)
             trace.p106_called = True
             gcd_path = resolve_gcd_path(None)
+            cache_path = resolve_cache_path(None)
             try:
                 gap_diag = diagnose_barcode_gap(
                     session,
                     barcode=normalized,
                     gcd_path=gcd_path,
-                    cache_path=resolve_cache_path(None),
+                    cache_path=cache_path,
                 )
+            except Exception as exc:
+                gap_diag_error = str(exc)
+                logger.warning(
+                    "p106.barcode_gap.diagnose_failed item_id=%s barcode=%s gcd_path=%s",
+                    item_id,
+                    normalized,
+                    gcd_path,
+                    exc_info=True,
+                )
+
+            if gap_diag is not None:
                 trace.apply_p106_diagnosis(gap_diag, gcd_path=gcd_path)
-                item.barcode_read_json = merge_barcode_gap_into_barcode_read(
-                    item.barcode_read_json,
-                    gap_diag,
+                if int(gap_diag.get("gcd_match_count") or 0) == 1 and gap_diag.get("exact_barcode_path"):
+                    p106_exact_barcode_authority = True
+                try:
+                    _apply_p106_diagnosis_to_intake_item(item, gap_diag=gap_diag)
+                except Exception:
+                    logger.warning(
+                        "p106.barcode_gap.display_failed item_id=%s barcode=%s",
+                        item_id,
+                        normalized,
+                        exc_info=True,
+                    )
+
+            if _p106_reports_no_gcd_match(gap_diag):
+                log_scanner_p106_gcd_miss(
+                    item_id=int(item_id),
+                    normalized_barcode=normalized,
+                    diagnosis=gap_diag,
+                    gcd_path=gcd_path,
+                    diagnose_error=gap_diag_error,
                 )
-                apply_barcode_gap_display_to_intake_item(item, gap_diag)
-            except Exception:
-                logger.warning("p106.barcode_gap.diagnose_failed item_id=%s", item_id, exc_info=True)
-                gap_diag = None
+
+            if _p106_reports_no_gcd_match(gap_diag) and _gcd_has_exact_barcode_authority(gcd_path, normalized):
+                try:
+                    gap_diag = diagnose_barcode_gap(
+                        session,
+                        barcode=normalized,
+                        gcd_path=gcd_path,
+                        cache_path=cache_path,
+                    )
+                    trace.apply_p106_diagnosis(gap_diag, gcd_path=gcd_path)
+                    try:
+                        _apply_p106_diagnosis_to_intake_item(item, gap_diag=gap_diag)
+                    except Exception:
+                        logger.warning(
+                            "p106.barcode_gap.display_failed item_id=%s barcode=%s retry=1",
+                            item_id,
+                            normalized,
+                            exc_info=True,
+                        )
+                except Exception:
+                    logger.warning(
+                        "p106.barcode_gap.diagnose_retry_failed item_id=%s barcode=%s",
+                        item_id,
+                        normalized,
+                        exc_info=True,
+                    )
 
             if gap_diag and AUTO_RESOLVE_UNIQUE_GCD_BARCODE_GAP and should_auto_resolve_barcode_gap_on_scan(gap_diag):
                 try:
@@ -499,13 +575,25 @@ def process_intake_item(session: Session, *, item_id: int) -> str:
                         session,
                         barcode=normalized,
                         gcd_path=gcd_path,
-                        cache_path=resolve_cache_path(None),
+                        cache_path=cache_path,
                         confirm_write=True,
                         intake_item_id=int(item.id or 0),
                     )
                     trace.apply_p106_resolve_outcome(resolve_outcome)
-                    candidate = _resolve_local_catalog_candidate(session, barcode=normalized)
+                    result = resolve_outcome.get("result") or {}
+                    resolved_issue_id = result.get("catalog_issue_id")
+                    if resolved_issue_id is not None and candidate is None:
+                        candidate = _local_candidate(
+                            session,
+                            source=MATCH_SOURCE_CATALOG_UPC,
+                            catalog_issue_id=int(resolved_issue_id),
+                            variant_id=result.get("variant_id"),
+                        )
+                    if candidate is None:
+                        candidate = _resolve_local_catalog_candidate(session, barcode=normalized)
                     local_catalog_hit = candidate is not None
+                    if resolve_outcome.get("written"):
+                        p106_exact_barcode_authority = True
                 except Exception:
                     logger.warning(
                         "p106.barcode_gap.auto_resolve_failed item_id=%s barcode=%s",
@@ -514,7 +602,12 @@ def process_intake_item(session: Session, *, item_id: int) -> str:
                         exc_info=True,
                     )
 
-            if candidate is None and (gap_diag is None or int(gap_diag.get("gcd_match_count") or 0) == 0):
+            if candidate is None and _p106_reports_no_gcd_match(gap_diag):
+                if _gcd_has_exact_barcode_authority(gcd_path, normalized):
+                    gap_reason = _scanner_gap_finish_reason(gap_diag or {})
+                    session.add(item)
+                    session.flush()
+                    return _finish(session, item, status=ITEM_NEEDS_REVIEW, reason=gap_reason)
                 trace.comicvine_fallback_called = True
                 candidate = _resolve_comicvine_candidate(session, barcode=normalized)
 
@@ -539,7 +632,7 @@ def process_intake_item(session: Session, *, item_id: int) -> str:
             issue_number=candidate.get("issue_number"),
             year=candidate.get("year"),
         )
-        if prefix_reason:
+        if prefix_reason and not p106_exact_barcode_authority:
             return _finish(
                 session,
                 item,

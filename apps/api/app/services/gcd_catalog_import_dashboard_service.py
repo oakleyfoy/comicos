@@ -14,7 +14,7 @@ from typing import Any, Literal
 
 from sqlmodel import Session, select
 
-from app.core.config import get_settings
+from app.core.config import API_ROOT, get_settings
 from app.models.catalog_p97 import CatalogImportJob
 from app.services.catalog_import_job_service import (
     complete_job,
@@ -130,7 +130,7 @@ def resolve_gcd_path(override: str | None = None) -> Path:
 def resolve_cache_path(override: str | None = None) -> Path:
     if override and str(override).strip():
         return Path(override).expanduser()
-    return DEFAULT_CACHE_PATH
+    return API_ROOT / DEFAULT_CACHE_PATH
 
 
 def ensure_catalog_cache(session: Session, cache_path: Path, *, refresh: bool = False) -> None:

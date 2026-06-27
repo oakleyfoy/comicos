@@ -98,6 +98,35 @@ def probe_local_barcode_hits(session: Session, *, normalized_barcode: str) -> tu
     return learned_hit, upc_hit
 
 
+def log_scanner_p106_gcd_miss(
+    *,
+    item_id: int,
+    normalized_barcode: str,
+    diagnosis: dict[str, Any] | None,
+    gcd_path: Path | None,
+    diagnose_error: str | None = None,
+) -> None:
+    """Structured log when P106 reports no GCD match (or diagnosis failed)."""
+    diag = diagnosis or {}
+    path_str, mtime = gcd_database_metadata(gcd_path)
+    logger.warning(
+        "p106.scanner.gcd_miss item_id=%s normalized_barcode=%s gcd_path=%s gcd_mtime=%s "
+        "gcd_exists=%s exact_sql_count=%s prefix_sql_count=%s gcd_match_count=%s "
+        "p106_reason=%s gcd_lookup_final_reason=%s diagnose_error=%s",
+        item_id,
+        normalized_barcode,
+        path_str,
+        mtime,
+        diag.get("gcd_database_exists", gcd_path.is_file() if gcd_path else False),
+        diag.get("gcd_sql_exact_barcode_column_count"),
+        diag.get("gcd_sql_prefix_barcode_like_count"),
+        diag.get("gcd_match_count"),
+        diag.get("reason") or diag.get("final_reason"),
+        diag.get("gcd_lookup_final_reason"),
+        diagnose_error,
+    )
+
+
 @dataclass
 class ScannerBarcodeResolutionTrace:
     intake_item_id: int
@@ -115,6 +144,9 @@ class ScannerBarcodeResolutionTrace:
     p106_gcd_issue_number: str | None = None
     p106_gcd_database_path: str | None = None
     p106_gcd_database_modified_at: str | None = None
+    p106_gcd_sql_exact_count: int | None = None
+    p106_gcd_sql_prefix_count: int | None = None
+    p106_gcd_lookup_final_reason: str | None = None
     p106_auto_imported: bool = False
     p106_auto_attached: bool = False
     comicvine_fallback_called: bool = False
@@ -137,6 +169,9 @@ class ScannerBarcodeResolutionTrace:
         self.p106_gcd_issue_id = diagnosis.get("gcd_issue_id")
         self.p106_gcd_series = payload.get("gcd_series")
         self.p106_gcd_issue_number = payload.get("gcd_issue_number")
+        self.p106_gcd_sql_exact_count = diagnosis.get("gcd_sql_exact_barcode_column_count")
+        self.p106_gcd_sql_prefix_count = diagnosis.get("gcd_sql_prefix_barcode_like_count")
+        self.p106_gcd_lookup_final_reason = diagnosis.get("gcd_lookup_final_reason")
 
     def apply_p106_resolve_outcome(self, outcome: dict[str, Any] | None) -> None:
         if not outcome or not outcome.get("written"):
@@ -176,6 +211,9 @@ def build_scanner_barcode_event(
         "p106_gcd_issue_number": trace.p106_gcd_issue_number,
         "p106_gcd_database_path": trace.p106_gcd_database_path,
         "p106_gcd_database_modified_at": trace.p106_gcd_database_modified_at,
+        "p106_gcd_sql_exact_count": trace.p106_gcd_sql_exact_count,
+        "p106_gcd_sql_prefix_count": trace.p106_gcd_sql_prefix_count,
+        "p106_gcd_lookup_final_reason": trace.p106_gcd_lookup_final_reason,
         "p106_auto_imported": trace.p106_auto_imported,
         "p106_auto_attached": trace.p106_auto_attached,
         "comicvine_fallback_called": trace.comicvine_fallback_called,

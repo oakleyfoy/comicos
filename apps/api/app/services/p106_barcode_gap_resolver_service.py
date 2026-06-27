@@ -24,6 +24,7 @@ from app.models.p106_barcode_gap import (
     BarcodeGapResolutionQueue,
     utc_now,
 )
+from app.services.barcode_scan_consensus_service import normalize_scan_preserving_supplement
 from app.services.catalog_ingestion_service import (
     merge_external_ids,
     normalize_issue_number,
@@ -38,6 +39,7 @@ from app.services.gcd_catalog_upc_insert_service import insert_catalog_upc_if_ab
 from app.services.p101_modern_catalog_audit_service import canonical_focus_publisher_label
 from app.services.gcd_barcode_search_service import (
     find_gcd_rows_by_normalized_barcode,
+    probe_gcd_sql_barcode_counts,
     search_gcd_barcode_fields,
 )
 from app.services.p1035_gcd_identity_backfill_service import _attach_gcd_meta
@@ -61,7 +63,7 @@ def _utc_now() -> datetime:
 
 
 def _normalize_scanned_barcode(raw: str) -> str:
-    return normalize_upc(raw) or raw.strip()
+    return normalize_scan_preserving_supplement(raw) or normalize_upc(raw) or raw.strip()
 
 
 def _p106_metadata(*, scanned_barcode: str) -> dict[str, Any]:
@@ -108,7 +110,9 @@ def resolve_catalog_issue_for_gcd_barcode(
             issue_number=str(gcd_match.get("issue_number") or ""),
         )
         if resolved is not None:
-            return int(resolved)
+            issue_id = int(resolved)
+            if session.get(CatalogIssue, issue_id) is not None:
+                return issue_id
     from app.models.catalog_master import CatalogSeries
 
     number = str(gcd_match.get("issue_number") or "")
@@ -414,6 +418,7 @@ def diagnose_barcode_gap(
 ) -> dict[str, Any]:
     normalized = _normalize_scanned_barcode(barcode)
     known = _already_in_catalog(session, normalized)
+    sql_probe = probe_gcd_sql_barcode_counts(gcd_path, normalized)
 
     if not gcd_path.is_file():
         if known:
@@ -429,6 +434,7 @@ def diagnose_barcode_gap(
             "gcd_match_count": 0,
             "status": P106_STATUS_UNRESOLVED,
             "reason": "gcd_database_missing",
+            **sql_probe,
         }
 
     gcd_search = search_gcd_barcode_fields(gcd_path, normalized)
@@ -449,6 +455,7 @@ def diagnose_barcode_gap(
         "gcd_prefix_hits": lookup["gcd_prefix_hits"],
         "gcd_notes_hits": lookup["gcd_notes_hits"],
         "gcd_lookup_final_reason": lookup["final_reason"],
+        **sql_probe,
     }
 
     if count == 0:

@@ -285,3 +285,40 @@ def find_gcd_rows_by_normalized_barcode(gcd_path: Path, normalized: str) -> list
                 m["title"] = row[3]
         conn.close()
     return matches
+
+
+def probe_gcd_sql_barcode_counts(gcd_path: Path, normalized: str) -> dict[str, Any]:
+    """Direct SQL counts for scanner diagnostics (barcode column exact + LIKE prefix)."""
+    from datetime import datetime, timezone
+
+    from app.services.barcode_validation_service import base_upc
+
+    resolved = str(gcd_path.resolve()) if gcd_path else None
+    out: dict[str, Any] = {
+        "gcd_database_path": resolved,
+        "gcd_database_exists": bool(gcd_path and gcd_path.is_file()),
+        "gcd_database_mtime_utc": None,
+        "gcd_sql_exact_barcode_column_count": 0,
+        "gcd_sql_prefix_barcode_like_count": 0,
+    }
+    if not gcd_path.is_file():
+        return out
+    out["gcd_database_mtime_utc"] = datetime.fromtimestamp(
+        gcd_path.stat().st_mtime, tz=timezone.utc
+    ).isoformat()
+    upc12 = base_upc(normalized) if len(normalized) >= 12 else normalized
+    conn = sqlite3.connect(gcd_path)
+    try:
+        exact = conn.execute(
+            "SELECT COUNT(*) FROM gcd_issue WHERE barcode = ?",
+            (normalized,),
+        ).fetchone()
+        prefix = conn.execute(
+            "SELECT COUNT(*) FROM gcd_issue WHERE barcode IS NOT NULL AND barcode LIKE ?",
+            (f"%{upc12}%",),
+        ).fetchone()
+        out["gcd_sql_exact_barcode_column_count"] = int(exact[0] if exact else 0)
+        out["gcd_sql_prefix_barcode_like_count"] = int(prefix[0] if prefix else 0)
+    finally:
+        conn.close()
+    return out
