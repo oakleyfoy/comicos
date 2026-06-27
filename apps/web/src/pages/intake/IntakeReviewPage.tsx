@@ -18,15 +18,25 @@ import {
   type IntakeReview,
 } from "../../api/intake";
 
-const COUNT_CARDS: { key: keyof IntakeCounts; label: string; tone: string }[] = [
-  { key: "scanned", label: "Scanned", tone: "text-slate-100" },
-  { key: "queued", label: "Queued", tone: "text-slate-300" },
-  { key: "processing", label: "Processing", tone: "text-amber-300" },
-  { key: "auto_matched", label: "Auto matched", tone: "text-emerald-400" },
-  { key: "ready_for_review", label: "Ready for review", tone: "text-sky-400" },
-  { key: "needs_review", label: "Needs review", tone: "text-orange-400" },
-  { key: "added_to_inventory", label: "Added to inventory", tone: "text-emerald-300" },
-  { key: "failed", label: "Failed", tone: "text-rose-400" },
+const COUNT_CARDS: {
+  key: keyof IntakeCounts;
+  label: string;
+  border: string;
+  value: string;
+}[] = [
+  { key: "scanned", label: "Scanned", border: "border-l-slate-500", value: "text-slate-50" },
+  { key: "queued", label: "Queued", border: "border-l-violet-400", value: "text-violet-200" },
+  { key: "processing", label: "Processing", border: "border-l-amber-400", value: "text-amber-100" },
+  { key: "auto_matched", label: "Auto matched", border: "border-l-teal-400", value: "text-teal-100" },
+  { key: "ready_for_review", label: "Ready for review", border: "border-l-sky-400", value: "text-sky-100" },
+  { key: "needs_review", label: "Needs review", border: "border-l-orange-400", value: "text-orange-100" },
+  {
+    key: "added_to_inventory",
+    label: "Added to inventory",
+    border: "border-l-emerald-400",
+    value: "text-emerald-100",
+  },
+  { key: "failed", label: "Failed", border: "border-l-rose-400", value: "text-rose-100" },
 ];
 
 const STATUS_LABEL: Record<string, string> = {
@@ -162,32 +172,37 @@ export function IntakeReviewPage(): JSX.Element {
   return (
     <div className="min-h-screen bg-slate-950 px-4 py-6 text-slate-100">
       <header className="mx-auto mb-5 max-w-3xl">
-        <h1 className="text-xl font-semibold">Intake Review</h1>
-        <p className="text-xs text-slate-400">
+        <h1 className="text-xl font-semibold text-white">Intake Review</h1>
+        <p className="mt-1 text-sm text-slate-300">
           Books identify in the background — review and add to inventory while scanning continues.
         </p>
       </header>
 
       {counts ? (
-        <div className="mx-auto mb-5 grid max-w-3xl grid-cols-2 gap-2 sm:grid-cols-4" data-testid="intake-counts">
+        <div className="mx-auto mb-5 grid max-w-3xl grid-cols-2 gap-2.5 sm:grid-cols-4" data-testid="intake-counts">
           {COUNT_CARDS.map((card) => (
-            <div key={card.key} className="rounded-xl bg-slate-900 px-3 py-3 text-center">
-              <div className={`text-2xl font-bold ${card.tone}`} data-testid={`count-${card.key}`}>
+            <div
+              key={card.key}
+              className={`rounded-xl border border-slate-800 bg-slate-900/90 px-3 py-3 text-center shadow-sm shadow-black/20 border-l-4 ${card.border}`}
+            >
+              <div className={`text-2xl font-bold tabular-nums ${card.value}`} data-testid={`count-${card.key}`}>
                 {counts[card.key]}
               </div>
-              <div className="text-[11px] uppercase tracking-wide text-slate-500">{card.label}</div>
+              <div className="mt-0.5 text-[10px] font-semibold uppercase tracking-wider text-slate-400">
+                {card.label}
+              </div>
             </div>
           ))}
         </div>
       ) : null}
 
-      <div className="mx-auto mb-4 flex max-w-3xl items-center justify-between">
-        <span className="text-sm text-slate-400">{items.length} items</span>
+      <div className="mx-auto mb-4 flex max-w-3xl items-center justify-between gap-3">
+        <span className="text-sm font-medium text-slate-300">{items.length} items</span>
         <button
           type="button"
           onClick={() => void onAddAll()}
           disabled={!counts || counts.auto_matched === 0}
-          className="rounded-lg bg-emerald-600 px-3 py-2 text-sm font-semibold hover:bg-emerald-500 disabled:opacity-40"
+          className="rounded-lg bg-emerald-500 px-3 py-2 text-sm font-semibold text-slate-950 shadow-sm shadow-emerald-950/30 hover:bg-emerald-400 disabled:cursor-not-allowed disabled:bg-slate-700 disabled:text-slate-500 disabled:shadow-none"
         >
           Add all high-confidence ({counts?.auto_matched ?? 0})
         </button>
@@ -309,6 +324,12 @@ export function IntakeReviewPage(): JSX.Element {
                           <>
                             <br />
                             OpenCV: unavailable
+                          </>
+                        ) : null}
+                        {item.barcode_read.zxing_available === false ? (
+                          <>
+                            <br />
+                            ZXing: unavailable (custom EAN-5 decoder still active)
                           </>
                         ) : null}
                       </p>
@@ -462,7 +483,7 @@ export function IntakeReviewPage(): JSX.Element {
           );
         })}
         {items.length === 0 ? (
-          <p className="rounded-xl border border-dashed border-slate-700 py-10 text-center text-sm text-slate-500">
+          <p className="rounded-xl border border-dashed border-slate-600 bg-slate-900/40 py-10 text-center text-sm text-slate-400">
             No scans yet. Start scanning on your phone — items appear here as they process.
           </p>
         ) : null}

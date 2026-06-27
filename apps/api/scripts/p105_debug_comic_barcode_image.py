@@ -104,6 +104,12 @@ def main() -> int:
     print(f"  opencv_available:    {opencv_ok}")
     if opencv_err:
         print(f"  opencv_import_error: {opencv_err}")
+    try:
+        from app.services.p105_upc_addon_decoder import _zxing_available
+
+        print(f"  zxing_available:     {_zxing_available()}  (custom EAN-5 decoder always available)")
+    except Exception as exc:  # noqa: BLE001
+        print(f"  zxing_available:     unknown ({exc})")
     if geometry:
         orig = geometry.get("original_size", {})
         work = geometry.get("working_size", {})

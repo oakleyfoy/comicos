@@ -52,6 +52,7 @@ from app.services.photo_import_fingerprint_service import (
 )
 from app.services.p105_upc_addon_decoder import (
     UpAddonDecodeResult,
+    _zxing_available,
     addon_debug_crops,
     decode_upc_addon,
     write_addon_microscope_debug,
@@ -106,6 +107,7 @@ class ComicBarcodeReadResult:
     detection_method: str = "percentage"
     geometry_attempted: bool = False
     opencv_available: bool = False
+    zxing_available: bool = False
     fallback_reason: str = ""
     geometry_rejection_reason: str = ""
     exception_message: str | None = None
@@ -143,6 +145,7 @@ class ComicBarcodeReadResult:
             "detection_method": self.detection_method,
             "geometry_attempted": self.geometry_attempted,
             "opencv_available": self.opencv_available,
+            "zxing_available": self.zxing_available,
             "fallback_reason": self.fallback_reason,
             "geometry_rejection_reason": self.geometry_rejection_reason,
             "exception_message": self.exception_message,
@@ -456,7 +459,7 @@ def _resolve_supplement_decision(
                 f"Add-on bars read {bar_supp} ({decision.decode_method}) but printed OCR read {ocr_supp}; "
                 "using bar decode — confirm in review."
             )
-            if ocr_in_cat and fp_ocr >= 80.0 and (not bar_in_cat or fp_bar < 65.0):
+            if not addon.check_valid and ocr_in_cat and fp_ocr >= 80.0 and (not bar_in_cat or fp_bar < 65.0):
                 decision.corrected_supplement = ocr_supp
                 decision.review_reason = (
                     f"Bars ({bar_supp}) disagree with OCR ({ocr_supp}); catalog + fingerprint favor OCR "
@@ -620,7 +623,6 @@ def read_comic_barcode_from_image_bytes(
     supplement_text_crop = addon_crops["supplement_text_only"]
 
     # --- OCR fallback only when add-on bar decode did not yield 5 digits ------
-    supplement_crop = regions["left_supplement"]
     left_variants: list[tuple[str, Image.Image]] = [("supplement_text_only", supplement_text_crop)]
     attempts: list[Any] = []
     vision_attempt = None
@@ -916,6 +918,7 @@ def read_comic_barcode_from_image_bytes(
         detection_method=geometry.detection_method,
         geometry_attempted=geometry.geometry_attempted,
         opencv_available=geometry.opencv_available,
+        zxing_available=_zxing_available(),
         fallback_reason=geometry.fallback_reason,
         geometry_rejection_reason=geometry.geometry_rejection_reason,
         exception_message=geometry.exception_message,
