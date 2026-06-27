@@ -85,6 +85,12 @@ class GradingCandidate(SQLModel, table=True):
     )
 
 
+from sqlalchemy.orm import synonym  # noqa: E402
+
+# Catalog unification renamed DB column to catalog_issue_id; keep query/API compat.
+GradingCandidate.canonical_comic_issue_id = synonym("catalog_issue_id")
+
+
 class GradingCandidateEvidence(SQLModel, table=True):
     __tablename__ = "grading_candidate_evidence"
     __table_args__ = (
