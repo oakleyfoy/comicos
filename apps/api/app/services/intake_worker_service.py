@@ -38,6 +38,7 @@ from app.models.intake_queue import (
 )
 from app.services.barcode_validation_service import (
     base_upc,
+    effective_publisher_for_barcode,
     supplement_extension,
     validate_barcode_catalog_match,
 )
@@ -344,6 +345,11 @@ def process_intake_item(session: Session, *, item_id: int) -> str:
                 status=ITEM_NEEDS_REVIEW,
                 reason=f"No catalog or ComicVine match for {normalized}.",
             )
+
+        if not (candidate.get("publisher") or "").strip():
+            inferred = effective_publisher_for_barcode(normalized, None)
+            if inferred:
+                candidate["publisher"] = inferred
 
         validation = validate_barcode_catalog_match(
             normalized,

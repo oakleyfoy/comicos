@@ -51,6 +51,16 @@ def test_dc_record_passes_when_consistent() -> None:
     assert result.status == "exact_match"
 
 
+def test_dc_prefix_inferred_when_publisher_missing() -> None:
+    result = validate_barcode_catalog_match(
+        SUPERMAN_39_FULL,
+        publisher=None,
+        issue_number="39",
+        year="2015",
+    )
+    assert result.status == "exact_match"
+
+
 def test_issue_mismatch_rejected_even_for_dc() -> None:
     result = validate_barcode_catalog_match(
         SUPERMAN_39_FULL,

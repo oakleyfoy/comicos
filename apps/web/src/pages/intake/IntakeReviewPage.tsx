@@ -39,6 +39,71 @@ const COUNT_CARDS: {
   { key: "failed", label: "Failed", border: "border-l-rose-400", value: "text-rose-100" },
 ];
 
+function intakeBarcode(item: IntakeItem): string {
+  const br = item.barcode_read;
+  const fromRead =
+    br && typeof br.reconstructed_full === "string" && br.reconstructed_full.length >= 12
+      ? br.reconstructed_full
+      : "";
+  return item.normalized_barcode || fromRead || item.raw_barcode || "";
+}
+
+function intakeHeadline(item: IntakeItem): string {
+  const series = item.matched_series?.trim();
+  const num = item.matched_issue_number?.trim();
+  if (series) {
+    return [series, num ? `#${num.replace(/^#/, "")}` : null].filter(Boolean).join(" ");
+  }
+  const ext = item.extension?.replace(/\D/g, "") ?? "";
+  if (ext.length === 5) {
+    const issue = parseInt(ext.slice(0, 3), 10);
+    if (issue > 0) {
+      const pub =
+        item.matched_publisher?.trim() ||
+        (item.base_upc?.startsWith("761941") ? "DC Comics" : "") ||
+        (item.base_upc?.startsWith("759606") ? "Marvel" : "");
+      return pub ? `${pub} · issue #${issue}` : `Issue #${issue}`;
+    }
+  }
+  return "Unidentified";
+}
+
+function intakeSubtitle(item: IntakeItem): string | null {
+  const parts: string[] = [];
+  if (item.matched_series && item.matched_publisher) {
+    parts.push(item.matched_publisher);
+  } else if (item.matched_publisher && !item.matched_series) {
+    parts.push(item.matched_publisher);
+  }
+  if (item.matched_year) parts.push(item.matched_year);
+  return parts.length ? parts.join(" · ") : null;
+}
+
+function intakeUserReason(item: IntakeItem): string | null {
+  const raw = item.reason?.trim();
+  if (!raw) return null;
+  if (raw.startsWith("Match failed validation: ")) {
+    const detail = raw.slice("Match failed validation: ".length);
+    if (/expects dc/i.test(detail) && /unknown/i.test(detail)) {
+      return "We read the barcode but couldn’t tie it to a catalog record yet. Use Import & Accept or pick the issue.";
+    }
+    if (/encodes issue #/i.test(detail)) {
+      return "Barcode issue number doesn’t match the catalog hit — pick the correct issue.";
+    }
+    return detail;
+  }
+  if (raw.startsWith("No catalog or ComicVine match")) {
+    return "No match in catalog yet — import from ComicVine or search manually.";
+  }
+  if (raw.includes("5-digit supplement")) {
+    return "Couldn’t read the full barcode — rescan with the supplement visible.";
+  }
+  if (raw.startsWith("Barcode match needs cover confirmation")) {
+    return "Barcode matched but cover didn’t confirm — review or pick the issue.";
+  }
+  return raw;
+}
+
 const STATUS_LABEL: Record<string, string> = {
   queued: "Queued",
   processing: "Processing",
@@ -217,9 +282,6 @@ export function IntakeReviewPage(): JSX.Element {
       <div className="mx-auto max-w-3xl space-y-3">
         {items.map((item) => {
           const busy = busyId === item.id;
-          const title = [item.matched_series, item.matched_issue_number ? `#${item.matched_issue_number}` : null]
-            .filter(Boolean)
-            .join(" ");
           const canConfirm = item.selected_catalog_issue_id != null;
           const reviewable =
             item.status === "ready_for_review" ||
@@ -240,183 +302,23 @@ export function IntakeReviewPage(): JSX.Element {
               <div className="min-w-0 flex-1">
                 <div className="mb-1 flex items-center gap-2">
                   <StatusBadge status={item.status} />
-                  {item.match_source ? (
-                    <span className="text-[11px] text-slate-500">{item.match_source}</span>
-                  ) : null}
-                  {item.confidence > 0 ? (
-                    <span className="text-[11px] text-slate-500">
-                      {Math.round(item.confidence * 100)}%
-                    </span>
-                  ) : null}
                 </div>
-                <p className="truncate text-sm font-medium text-slate-100">
-                  {title || item.matched_publisher || "Unidentified"}
-                </p>
-                <div className="mt-1 space-y-0.5 text-xs text-slate-500">
-                  <p>Raw scan: {item.raw_barcode || "—"}</p>
-                  <p>Normalized: {item.normalized_barcode || "—"}</p>
-                  {item.base_upc ? <p>Base UPC: {item.base_upc}</p> : null}
-                  {item.extension ? <p>Supplement: {item.extension}</p> : null}
-                  {item.possible_corrected_barcode ? (
-                    <p className="text-amber-300/90">
-                      Possible correction: {item.possible_corrected_barcode}
-                    </p>
-                  ) : null}
-                  {item.barcode_read ? (
-                    <>
-                      <p>Reconstructed: {String(item.barcode_read.reconstructed_full ?? "—")}</p>
-                      <p>Decoded supplement (bars): {String(item.barcode_read.decoded_supplement ?? "—")}</p>
-                      <p>OCR supplement (left text): {String(item.barcode_read.ocr_supplement ?? item.barcode_read.left_supplement_ocr ?? "—")}</p>
-                      {item.barcode_read.corrected_supplement ? (
-                        <p>Corrected supplement: {String(item.barcode_read.corrected_supplement)}</p>
-                      ) : null}
-                      {item.barcode_read.region_ocr_debug &&
-                      typeof item.barcode_read.region_ocr_debug === "object" &&
-                      (
-                        (item.barcode_read.region_ocr_debug as Record<string, unknown>)
-                          .left_supplement as Record<string, unknown> | undefined
-                      )?.supplement_consensus ? (
-                        <p className="text-slate-400">
-                          Multi-frame OCR consensus:{" "}
-                          {String(
-                            (
-                              (
-                                (item.barcode_read.region_ocr_debug as Record<string, unknown>)
-                                  .left_supplement as Record<string, unknown>
-                              ).supplement_consensus as Record<string, unknown>
-                            ).digits || "—",
-                          )}
-                        </p>
-                      ) : null}
-                      <p>
-                        Final supplement: {String(item.barcode_read.final_supplement || "—")}
-                        {item.barcode_read.catalog_confirmed ? " (catalog ✓)" : ""}
-                        {item.barcode_read.fingerprint_confirmed ? " (fingerprint ✓)" : ""}
-                      </p>
-                      <p>
-                        Decode method:{" "}
-                        {String(item.barcode_read.supplement_decode_method || "—")}
-                        {item.barcode_read.supplement_decode_confidence
-                          ? ` (${Math.round(Number(item.barcode_read.supplement_decode_confidence) * 100)}%)`
-                          : ""}
-                      </p>
-                      {item.barcode_read.supplement_disagreement ? (
-                        <p className="text-amber-300/90">
-                          Bars vs OCR disagree — confirm final supplement above.
-                        </p>
-                      ) : null}
-                      <p>
-                        Detection method: {String(item.barcode_read.detection_method ?? "percentage")}
-                        {item.barcode_read.detection_method === "percentage" &&
-                        item.barcode_read.fallback_reason ? (
-                          <>
-                            <br />
-                            Fallback reason: {String(item.barcode_read.fallback_reason)}
-                          </>
-                        ) : null}
-                        {item.barcode_read.geometry_rejection_reason ? (
-                          <>
-                            <br />
-                            Geometry rejection: {String(item.barcode_read.geometry_rejection_reason)}
-                          </>
-                        ) : null}
-                        {item.barcode_read.opencv_available === false ? (
-                          <>
-                            <br />
-                            OpenCV: unavailable
-                          </>
-                        ) : null}
-                        {item.barcode_read.zxing_available === false ? (
-                          <>
-                            <br />
-                            ZXing: unavailable (custom EAN-5 decoder still active)
-                          </>
-                        ) : null}
-                      </p>
-                      <p>
-                        Confidence: main {Math.round(Number(item.barcode_read.confidence_main ?? 0) * 100)}%,
-                        supplement {Math.round(Number(item.barcode_read.confidence_left ?? 0) * 100)}%
-                      </p>
-                      {Array.isArray(item.barcode_read.supplement_candidates) &&
-                      item.barcode_read.supplement_candidates.length > 0 ? (
-                        <p className="text-slate-400">
-                          OCR candidates:{" "}
-                          {(item.barcode_read.supplement_candidates as Array<Record<string, unknown>>)
-                            .slice(0, 3)
-                            .map(
-                              (c) =>
-                                `${String(c.digits)}×${String(c.repeat_count ?? 0)}${
-                                  c.catalog_exists ? "(cat)" : ""
-                                }`,
-                            )
-                            .join(", ")}
-                        </p>
-                      ) : null}
-                      {Array.isArray(item.barcode_read.ocr_attempts) &&
-                      item.barcode_read.ocr_attempts.length > 0 ? (
-                        <details className="text-slate-500">
-                          <summary className="cursor-pointer">
-                            Raw OCR attempts ({(item.barcode_read.ocr_attempts as unknown[]).length})
-                          </summary>
-                          <ul className="mt-1 space-y-0.5">
-                            {(item.barcode_read.ocr_attempts as Array<Record<string, unknown>>)
-                              .filter((a) => String(a.digits ?? "").length > 0)
-                              .slice(0, 12)
-                              .map((a, idx) => (
-                                <li key={idx}>
-                                  {String(a.variant)}: {String(a.digits) || "∅"} (
-                                  {Math.round(Number(a.confidence ?? 0) * 100)}%)
-                                </li>
-                              ))}
-                          </ul>
-                        </details>
-                      ) : null}
-                      {item.barcode_read.supplement_disagreement ? (
-                        <p className="text-amber-300/90">
-                          Supplement mismatch: bar decode vs left OCR — confirm final supplement.
-                        </p>
-                      ) : null}
-                      {item.barcode_read.inferred_supplement ? (
-                        <p className="text-amber-300/90">Supplement inferred/corrected (not raw OCR).</p>
-                      ) : null}
-                      {item.barcode_read.correction_reason ? (
-                        <p className="text-amber-300/90">{String(item.barcode_read.correction_reason)}</p>
-                      ) : null}
-                      {item.barcode_read.review_reason &&
-                      item.barcode_read.review_reason !== item.barcode_read.correction_reason ? (
-                        <p className="text-amber-300/90">{String(item.barcode_read.review_reason)}</p>
-                      ) : null}
-                      {item.barcode_read.region_ocr_debug &&
-                      typeof item.barcode_read.region_ocr_debug === "object" &&
-                      (item.barcode_read.region_ocr_debug as Record<string, unknown>).geometry_viz ? (
-                        <p className="text-slate-400">
-                          Geometry OCR viz:{" "}
-                          {String(
-                            (
-                              (item.barcode_read.region_ocr_debug as Record<string, unknown>)
-                                .geometry_viz as Record<string, unknown>
-                            ).intended_vs_detected_note ?? "",
-                          )}
-                          {(item.barcode_read.region_debug_path as string | undefined)
-                            ? ` See ${String(item.barcode_read.region_debug_path)}/overlay_labeled.jpg`
-                            : ""}
-                        </p>
-                      ) : null}
-                    </>
-                  ) : null}
-                </div>
-                {item.candidates.length > 0 ? (
-                  <ul className="mt-2 space-y-1 text-xs text-slate-400">
-                    {item.candidates.slice(0, 5).map((c) => (
-                      <li key={c.id}>
-                        Candidate: {c.series ?? "Unknown"} #{c.issue_number ?? "?"} ({c.source},{" "}
-                        {Math.round(c.score * 100)}%)
-                      </li>
-                    ))}
-                  </ul>
+                <p className="text-base font-semibold text-slate-50">{intakeHeadline(item)}</p>
+                {intakeSubtitle(item) ? (
+                  <p className="text-sm text-slate-400">{intakeSubtitle(item)}</p>
                 ) : null}
-                {item.reason ? <p className="mt-1 text-xs text-orange-300/80">{item.reason}</p> : null}
-                {item.error ? <p className="mt-1 text-xs text-rose-300/80">{item.error}</p> : null}
+                {intakeBarcode(item) ? (
+                  <p className="mt-1 font-mono text-xs text-slate-500">{intakeBarcode(item)}</p>
+                ) : null}
+                {item.barcode_read?.supplement_disagreement ? (
+                  <p className="mt-1 text-xs text-amber-300/90">
+                    Barcode and printed supplement disagree — confirm before adding.
+                  </p>
+                ) : null}
+                {intakeUserReason(item) ? (
+                  <p className="mt-2 text-sm text-orange-200/90">{intakeUserReason(item)}</p>
+                ) : null}
+                {item.error ? <p className="mt-1 text-sm text-rose-300/90">{item.error}</p> : null}
 
                 {item.status !== "added_to_inventory" && item.status !== "rejected" ? (
                   <div className="mt-2 flex flex-wrap gap-2">

@@ -24,6 +24,14 @@ PUBLISHER_PREFIXES: dict[str, tuple[str, ...]] = {
     "709853": ("image",),       # Image (common)
 }
 
+# Human-readable publisher when the UPC prefix is authoritative but catalog/CV omitted publisher.
+PUBLISHER_PREFIX_LABELS: dict[str, str] = {
+    "761941": "DC Comics",
+    "759606": "Marvel",
+    "761568": "Dark Horse",
+    "709853": "Image",
+}
+
 # Modern UPC era guard: a modern direct-market UPC should not resolve to a pre-1976 book.
 MODERN_UPC_MIN_YEAR = 1976
 
@@ -73,6 +81,19 @@ def expected_publisher_keywords(barcode: str) -> tuple[str, ...]:
     return PUBLISHER_PREFIXES.get(prefix, ())
 
 
+def inferred_publisher_label(barcode: str) -> str | None:
+    """Publisher name implied by a known direct-market UPC prefix (e.g. 761941 -> DC Comics)."""
+    prefix = normalize_upc(barcode)[:6]
+    return PUBLISHER_PREFIX_LABELS.get(prefix)
+
+
+def effective_publisher_for_barcode(barcode: str, publisher: str | None) -> str | None:
+    """Use catalog publisher when present; otherwise infer from UPC prefix when known."""
+    if (publisher or "").strip():
+        return publisher
+    return inferred_publisher_label(barcode)
+
+
 def publisher_matches_expected(actual_publisher: str | None, keywords: tuple[str, ...]) -> bool:
     if not keywords:
         return True  # No known prefix rule -> nothing to enforce.
@@ -106,9 +127,10 @@ def validate_barcode_catalog_match(
     """Return exact_match only when the catalog record is consistent with the barcode."""
     normalized = normalize_upc(barcode)
     keywords = expected_publisher_keywords(normalized)
+    publisher_checked = effective_publisher_for_barcode(normalized, publisher)
 
     # 1) Publisher family must match the UPC prefix (e.g. 761941 -> DC).
-    if not publisher_matches_expected(publisher, keywords):
+    if not publisher_matches_expected(publisher_checked, keywords):
         return BarcodeValidation(
             "no_safe_match",
             f"Barcode prefix {normalized[:6]} expects {'/'.join(keywords)} but matched publisher "
