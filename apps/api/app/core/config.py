@@ -194,6 +194,14 @@ class Settings(BaseSettings):
         alias="P104_DERIVATIVE_SIZES",
     )
     gcd_sqlite_path_raw: str = Field(default="", alias="GCD_SQLITE_PATH")
+    gcd_slim_db_url: str = Field(default="", alias="GCD_SLIM_DB_URL")
+    gcd_slim_db_sha256: str = Field(default="", alias="GCD_SLIM_DB_SHA256")
+    # Cloudflare R2 (S3-compatible) cloud asset pipeline. URLs are never hardcoded.
+    r2_account_id: str = Field(default="", alias="R2_ACCOUNT_ID")
+    r2_endpoint_url: str = Field(default="", alias="R2_ENDPOINT_URL")
+    r2_access_key_id: str = Field(default="", alias="R2_ACCESS_KEY_ID")
+    r2_secret_access_key: str = Field(default="", alias="R2_SECRET_ACCESS_KEY")
+    gcd_r2_bucket: str = Field(default="", alias="GCD_R2_BUCKET")
     comicvine_api_key: str = Field(default="", alias="COMICVINE_API_KEY")
     comicvine_api_base_url: str = Field(default="", alias="COMICVINE_API_BASE_URL")
     comicvine_max_requests_per_resource_hour: int = Field(
@@ -508,6 +516,16 @@ class Settings(BaseSettings):
         if trimmed:
             return Path(trimmed).expanduser()
         return REPO_ROOT / "data" / "p101" / "current" / "2026-06-15.db"
+
+    @property
+    def r2_resolved_endpoint_url(self) -> str:
+        explicit = self.r2_endpoint_url.strip()
+        if explicit:
+            return explicit
+        account = self.r2_account_id.strip()
+        if account:
+            return f"https://{account}.r2.cloudflarestorage.com"
+        return ""
 
 
 def validate_production_settings(settings: Settings) -> None:

@@ -1375,6 +1375,17 @@ def _log_photo_import_vision_sandbox_on_startup() -> None:
         s.photo_import_vision_sandbox_model,
     )
 
+
+@app.on_event("startup")
+def _ensure_gcd_database_on_startup() -> None:
+    """Provision the slim GCD barcode DB on the API host so scans can resolve barcodes."""
+    try:
+        from app.services.gcd_database_bootstrap_service import ensure_gcd_database_present
+
+        ensure_gcd_database_present()
+    except Exception:  # noqa: BLE001 - never block boot on GCD provisioning
+        _startup_logger.exception("gcd.bootstrap.startup_failed")
+
 attach_market_v1_layer(app)
 attach_scan_ingestion_layer(app)
 attach_scan_normalization_layer(app)
