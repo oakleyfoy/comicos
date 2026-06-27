@@ -78,11 +78,18 @@ from app.services.photo_import_fingerprint_service import (
 )
 from app.services.photo_import_storage_service import resolve_photo_import_storage_path
 from app.services.recognition.catalog_matcher import load_catalog_issue_identity
+from app.services.scanner_barcode_field_test_service import (
+    ScannerBarcodeResolutionTrace,
+    probe_local_barcode_hits,
+    record_scanner_barcode_resolution,
+)
 
 logger = logging.getLogger(__name__)
 
 # Unique exact GCD barcode hits auto-resolve during scan (no manual CLI).
 AUTO_RESOLVE_UNIQUE_GCD_BARCODE_GAP = True
+
+_active_barcode_traces: dict[int, ScannerBarcodeResolutionTrace] = {}
 
 COVER_FINGERPRINT_AGREE_SCORE = 70.0
 # Recognition images below this long edge are too small for barcode OCR/fingerprint.
@@ -272,6 +279,22 @@ def _resolve_candidate(session: Session, *, barcode: str) -> dict[str, Any] | No
     return _resolve_comicvine_candidate(session, barcode=barcode)
 
 
+def _begin_barcode_trace(item: IntakeSessionItem) -> ScannerBarcodeResolutionTrace:
+    item_id = int(item.id or 0)
+    trace = ScannerBarcodeResolutionTrace(
+        intake_item_id=item_id,
+        session_id=int(item.session_id) if item.session_id is not None else None,
+    )
+    _active_barcode_traces[item_id] = trace
+    return trace
+
+
+def _pop_barcode_trace(item_id: int | None) -> ScannerBarcodeResolutionTrace | None:
+    if item_id is None:
+        return None
+    return _active_barcode_traces.pop(int(item_id), None)
+
+
 def _scanner_gap_finish_reason(diagnosis: dict[str, Any]) -> str:
     if diagnosis.get("ready_to_auto_import"):
         return "Not in your catalog yet — GCD match found (Import & Accept to add)."
@@ -280,30 +303,6 @@ def _scanner_gap_finish_reason(diagnosis: dict[str, Any]) -> str:
     if int(diagnosis.get("gcd_match_count") or 0) == 0:
         return "Not in your catalog yet — use Import & Accept (ComicVine) or pick the issue."
     return "Not in your catalog yet — use Import & Accept or pick the issue."
-
-
-def _log_scanner_barcode_gap(
-    *,
-    item_id: int,
-    scanner_barcode: str,
-    local_catalog_hit: bool,
-    p106_called: bool,
-    diagnosis: dict[str, Any] | None,
-    final_scanner_status: str,
-) -> None:
-    diag = diagnosis or {}
-    logger.info(
-        "intake.scanner.barcode_gap item_id=%s scanner_barcode=%s local_catalog_hit=%s "
-        "p106_called=%s p106_status=%s p106_gcd_issue_id=%s p106_catalog_issue_id=%s final_scanner_status=%s",
-        item_id,
-        scanner_barcode,
-        local_catalog_hit,
-        p106_called,
-        diag.get("status"),
-        diag.get("gcd_issue_id"),
-        diag.get("catalog_issue_id"),
-        final_scanner_status,
-    )
 
 
 def _cover_confirms_barcode_match(
@@ -347,6 +346,8 @@ def process_intake_item(session: Session, *, item_id: int) -> str:
     item.status = ITEM_PROCESSING
     session.add(item)
     session.commit()
+
+    trace = _begin_barcode_trace(item)
 
     try:
         abs_path = resolve_photo_import_storage_path(item.storage_path, image_id=item_id)
@@ -420,6 +421,11 @@ def process_intake_item(session: Session, *, item_id: int) -> str:
         item.base_upc = (scan_validation.base_upc or base_upc(normalized))[:16]
         item.extension = scan_validation.extension or supplement_extension(normalized) or None
         _stamp_item_barcode_identity(item, normalized)
+        trace.scanned_barcode_raw = item.raw_barcode
+        trace.normalized_barcode = normalized
+        learned_probe, upc_probe = probe_local_barcode_hits(session, normalized_barcode=normalized)
+        trace.learned_barcode_hit = learned_probe
+        trace.local_catalog_upc_hit = upc_probe
 
         local_full_barcode = has_full_direct_market_barcode(normalized)
         if local_full_barcode:
@@ -455,7 +461,6 @@ def process_intake_item(session: Session, *, item_id: int) -> str:
         candidate = _resolve_local_catalog_candidate(session, barcode=normalized)
         local_catalog_hit = candidate is not None
         gap_diag: dict[str, Any] | None = None
-        p106_called = False
 
         if candidate is None:
             from app.services.p105_barcode_repair_service import record_missing_barcode_queue
@@ -469,14 +474,16 @@ def process_intake_item(session: Session, *, item_id: int) -> str:
             )
 
             record_missing_barcode_queue(session, item=item)
-            p106_called = True
+            trace.p106_called = True
+            gcd_path = resolve_gcd_path(None)
             try:
                 gap_diag = diagnose_barcode_gap(
                     session,
                     barcode=normalized,
-                    gcd_path=resolve_gcd_path(None),
+                    gcd_path=gcd_path,
                     cache_path=resolve_cache_path(None),
                 )
+                trace.apply_p106_diagnosis(gap_diag, gcd_path=gcd_path)
                 item.barcode_read_json = merge_barcode_gap_into_barcode_read(
                     item.barcode_read_json,
                     gap_diag,
@@ -488,14 +495,15 @@ def process_intake_item(session: Session, *, item_id: int) -> str:
 
             if gap_diag and AUTO_RESOLVE_UNIQUE_GCD_BARCODE_GAP and should_auto_resolve_barcode_gap_on_scan(gap_diag):
                 try:
-                    resolve_barcode_gap(
+                    resolve_outcome = resolve_barcode_gap(
                         session,
                         barcode=normalized,
-                        gcd_path=resolve_gcd_path(None),
+                        gcd_path=gcd_path,
                         cache_path=resolve_cache_path(None),
                         confirm_write=True,
                         intake_item_id=int(item.id or 0),
                     )
+                    trace.apply_p106_resolve_outcome(resolve_outcome)
                     candidate = _resolve_local_catalog_candidate(session, barcode=normalized)
                     local_catalog_hit = candidate is not None
                 except Exception:
@@ -507,6 +515,7 @@ def process_intake_item(session: Session, *, item_id: int) -> str:
                     )
 
             if candidate is None and (gap_diag is None or int(gap_diag.get("gcd_match_count") or 0) == 0):
+                trace.comicvine_fallback_called = True
                 candidate = _resolve_comicvine_candidate(session, barcode=normalized)
 
             if candidate is None:
@@ -514,14 +523,6 @@ def process_intake_item(session: Session, *, item_id: int) -> str:
                 session.add(item)
                 session.flush()
                 final_status = ITEM_NEEDS_REVIEW
-                _log_scanner_barcode_gap(
-                    item_id=item_id,
-                    scanner_barcode=normalized,
-                    local_catalog_hit=local_catalog_hit,
-                    p106_called=p106_called,
-                    diagnosis=gap_diag,
-                    final_scanner_status=final_status,
-                )
                 return _finish(session, item, status=final_status, reason=gap_reason)
 
         if local_full_barcode and barcode_catalog_identity_conflict(session, normalized):
@@ -564,6 +565,10 @@ def process_intake_item(session: Session, *, item_id: int) -> str:
         item.matched_issue_number = (candidate.get("issue_number") or None)
         item.matched_year = (candidate.get("year") or None)
         item.cover_url = (candidate.get("cover_url") or None)
+        trace.match_source = str(candidate.get("source"))
+        learned_probe, upc_probe = probe_local_barcode_hits(session, normalized_barcode=normalized)
+        trace.learned_barcode_hit = learned_probe
+        trace.local_catalog_upc_hit = upc_probe
 
         learned_row = candidate.get("learned_row")
         if isinstance(learned_row, ComicIssueBarcode):
@@ -658,6 +663,13 @@ def process_intake_item(session: Session, *, item_id: int) -> str:
 
 
 def _finish(session: Session, item: IntakeSessionItem, *, status: str, reason: str | None) -> str:
+    trace = _pop_barcode_trace(int(item.id) if item.id is not None else None)
+    record_scanner_barcode_resolution(
+        trace=trace,
+        item=item,
+        final_status=status,
+        final_reason=reason,
+    )
     if item.normalized_barcode:
         _stamp_item_barcode_identity(item, item.normalized_barcode)
     item.status = status
@@ -670,6 +682,13 @@ def _finish(session: Session, item: IntakeSessionItem, *, status: str, reason: s
 
 
 def _fail(session: Session, item: IntakeSessionItem, message: str) -> str:
+    trace = _pop_barcode_trace(int(item.id) if item.id is not None else None)
+    record_scanner_barcode_resolution(
+        trace=trace,
+        item=item,
+        final_status=ITEM_FAILED,
+        final_reason=message,
+    )
     item.status = ITEM_FAILED
     item.error = message
     item.processed_at = utc_now()
