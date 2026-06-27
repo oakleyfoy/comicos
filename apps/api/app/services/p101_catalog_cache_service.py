@@ -161,7 +161,7 @@ def export_catalog_cache(session: Session, cache_path: Path) -> int:
         conn.executemany("INSERT OR IGNORE INTO catalog_upc_cache VALUES (?, ?)", upc_batch)
 
     learned_batch: list[tuple] = []
-    for (bc,) in session.exec(select(ComicIssueBarcode.normalized_barcode)).all():
+    for bc in session.exec(select(ComicIssueBarcode.normalized_barcode)).all():
         if bc:
             learned_batch.append((str(bc),))
         if len(learned_batch) >= 5000:

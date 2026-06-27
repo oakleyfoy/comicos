@@ -63,6 +63,46 @@ TIER_SCORE = {
 }
 
 P104_LOG_DIR = Path("data/p104/runs")
+P104_RUN_COUNTER_FLUSH_EVERY = 150
+P104_SEQUENTIAL_COMMIT_EVERY = 150
+P104_SYNC_ISSUE_FETCH_BATCH = 2500
+P104_SYNC_COMMIT_EVERY = 750
+P104_SYNC_PROGRESS_EVERY = 1000
+
+
+@dataclass
+class CoverAssetSyncTiming:
+    """Wall-clock seconds for sync phase breakdown (queue build only)."""
+
+    inventory_preload: float = 0.0
+    upc_preload: float = 0.0
+    cover_url_preload: float = 0.0
+    asset_preload: float = 0.0
+    issue_scan_and_upsert: float = 0.0
+    commit: float = 0.0
+    total: float = 0.0
+
+    def to_dict(self) -> dict[str, float]:
+        return {
+            "inventory_preload": round(self.inventory_preload, 4),
+            "upc_preload": round(self.upc_preload, 4),
+            "cover_url_preload": round(self.cover_url_preload, 4),
+            "asset_preload": round(self.asset_preload, 4),
+            "issue_scan_and_upsert": round(self.issue_scan_and_upsert, 4),
+            "commit": round(self.commit, 4),
+            "total": round(self.total, 4),
+        }
+
+    def bottleneck_label(self) -> str:
+        parts = {
+            "cover_url_preload": self.cover_url_preload,
+            "asset_preload": self.asset_preload,
+            "issue_scan_and_upsert": self.issue_scan_and_upsert,
+            "commit": self.commit,
+            "inventory_preload": self.inventory_preload,
+            "upc_preload": self.upc_preload,
+        }
+        return max(parts, key=parts.get)
 
 
 @dataclass
@@ -74,19 +114,26 @@ class CoverAssetSyncResult:
     updated: int = 0
     skipped_complete: int = 0
     skipped_no_url: int = 0
+    skipped_unchanged: int = 0
     catalog_issues_scanned: int = 0
     touched: int = 0
+    timing: CoverAssetSyncTiming | None = None
 
     def to_dict(self) -> dict[str, Any]:
-        return {
+        payload = {
             "sync_limit": self.sync_limit,
             "created": self.created,
             "updated": self.updated,
             "skipped_complete": self.skipped_complete,
             "skipped_no_url": self.skipped_no_url,
+            "skipped_unchanged": self.skipped_unchanged,
             "catalog_issues_scanned": self.catalog_issues_scanned,
             "touched": self.touched,
         }
+        if self.timing is not None:
+            payload["timing"] = self.timing.to_dict()
+            payload["timing_bottleneck"] = self.timing.bottleneck_label()
+        return payload
 
 
 @dataclass
@@ -193,6 +240,90 @@ def resolve_cover_url_for_issue(
     if cv_url:
         return cv_url, "COMICVINE_META"
     return None, None
+
+
+def resolve_cover_url_for_issue_cached(
+    issue: CatalogIssue,
+    *,
+    cover_urls_by_issue: dict[int, tuple[str, str]],
+) -> tuple[str | None, str | None]:
+    """Resolve cover URL without DB (uses preloaded catalog_image map + issue external ids)."""
+    iid = int(issue.id or 0)
+    cached = cover_urls_by_issue.get(iid)
+    if cached:
+        return cached
+    cv_url = _comicvine_cover_from_external_ids(issue.external_source_ids)
+    if cv_url:
+        return cv_url, "COMICVINE_META"
+    return None, None
+
+
+def _preload_cover_urls_by_issue(session: Session) -> dict[int, tuple[str, str]]:
+    rows = session.exec(
+        select(CatalogImage.issue_id, CatalogImage.source, CatalogImage.source_url)
+        .where(CatalogImage.image_type == "cover")
+        .where(col(CatalogImage.source_url).is_not(None))
+        .where(CatalogImage.source_url != "")
+        .order_by(CatalogImage.issue_id.asc(), CatalogImage.id.asc())
+    ).all()
+    out: dict[int, tuple[str, str]] = {}
+    for row in rows:
+        issue_id, source, source_url = row if isinstance(row, tuple) else (row.issue_id, row.source, row.source_url)
+        if issue_id is None:
+            continue
+        iid = int(issue_id)
+        if iid in out:
+            continue
+        url = str(source_url or "").strip()
+        if not url:
+            continue
+        out[iid] = (url, str(source or "catalog_image"))
+    return out
+
+
+def _preload_complete_cover_asset_keys(session: Session) -> set[tuple[int, str]]:
+    rows = session.exec(
+        select(CatalogCoverAsset.catalog_issue_id, CatalogCoverAsset.source_url).where(
+            CatalogCoverAsset.status == COVER_ASSET_STATUS_COMPLETE
+        )
+    ).all()
+    out: set[tuple[int, str]] = set()
+    for row in rows:
+        iid, url = row if isinstance(row, tuple) else (row.catalog_issue_id, row.source_url)
+        if iid is None or not url:
+            continue
+        out.add((int(iid), str(url)))
+    return out
+
+
+def _preload_non_complete_cover_assets(session: Session) -> dict[tuple[int, str], CatalogCoverAsset]:
+    rows = session.exec(
+        select(CatalogCoverAsset).where(CatalogCoverAsset.status != COVER_ASSET_STATUS_COMPLETE)
+    ).all()
+    return {(int(a.catalog_issue_id), str(a.source_url)): a for a in rows}
+
+
+def _print_sync_progress(
+    *,
+    scanned: int,
+    created: int,
+    updated: int,
+    skipped_complete: int,
+    skipped_no_url: int,
+    elapsed_s: float,
+) -> None:
+    ipm = (scanned / elapsed_s) * 60.0 if elapsed_s > 0 else 0.0
+    print(
+        "P104 sync "
+        f"scanned={scanned} "
+        f"created={created} "
+        f"updated={updated} "
+        f"skipped_complete={skipped_complete} "
+        f"skipped_no_url={skipped_no_url} "
+        f"elapsed={elapsed_s:.1f}s "
+        f"issues_per_minute={ipm:.0f}",
+        flush=True,
+    )
 
 
 def _issue_year(issue: CatalogIssue) -> int | None:
@@ -391,62 +522,154 @@ def sync_cover_assets_batch(session: Session, *, sync_limit: int) -> CoverAssetS
     Completed assets are never modified. Issues without a resolvable URL are skipped
     and do not count toward sync_limit.
     """
-    result = CoverAssetSyncResult(sync_limit=int(sync_limit))
+    wall = time.perf_counter()
+    timing = CoverAssetSyncTiming()
+    result = CoverAssetSyncResult(sync_limit=int(sync_limit), timing=timing)
     if sync_limit <= 0:
+        timing.total = time.perf_counter() - wall
         return result
 
+    t0 = time.perf_counter()
     inventory_ids = _load_inventory_issue_ids(session)
+    timing.inventory_preload = time.perf_counter() - t0
+
+    t0 = time.perf_counter()
     upc_ids = _load_upc_issue_ids(session)
-    statement = (
-        select(CatalogIssue, CatalogPublisher.name)
-        .join(CatalogPublisher, CatalogIssue.publisher_id == CatalogPublisher.id, isouter=True)
-        .order_by(CatalogIssue.id.asc())
-    )
-    for issue, pub_name in session.exec(statement):
-        result.catalog_issues_scanned += 1
-        iid = int(issue.id or 0)
-        url, source = resolve_cover_url_for_issue(session, issue)
-        if not url:
-            result.skipped_no_url += 1
-            continue
-        existing = session.exec(
-            select(CatalogCoverAsset).where(
-                CatalogCoverAsset.catalog_issue_id == iid,
-                CatalogCoverAsset.source_url == url,
-            )
-        ).first()
-        if existing is not None and existing.status == COVER_ASSET_STATUS_COMPLETE:
-            result.skipped_complete += 1
-            continue
-        score, tier = compute_priority_for_issue(
-            session, issue, inventory_ids=inventory_ids, upc_ids=upc_ids, publisher_name=pub_name
+    timing.upc_preload = time.perf_counter() - t0
+
+    t0 = time.perf_counter()
+    cover_urls_by_issue = _preload_cover_urls_by_issue(session)
+    timing.cover_url_preload = time.perf_counter() - t0
+
+    t0 = time.perf_counter()
+    complete_keys = _preload_complete_cover_asset_keys(session)
+    assets_by_issue_url = _preload_non_complete_cover_assets(session)
+    timing.asset_preload = time.perf_counter() - t0
+
+    scan_start = time.perf_counter()
+    pending_commit = 0
+    last_id = 0
+
+    while result.touched < sync_limit:
+        batch = list(
+            session.exec(
+                select(CatalogIssue, CatalogPublisher.name)
+                .join(CatalogPublisher, CatalogIssue.publisher_id == CatalogPublisher.id, isouter=True)
+                .where(col(CatalogIssue.id) > last_id)
+                .order_by(col(CatalogIssue.id).asc())
+                .limit(P104_SYNC_ISSUE_FETCH_BATCH)
+            ).all()
         )
-        now = utc_now()
-        if existing is None:
-            session.add(
-                CatalogCoverAsset(
-                    catalog_issue_id=iid,
-                    source=source or "UNKNOWN",
-                    source_url=url,
-                    status=COVER_ASSET_STATUS_PENDING,
-                    priority_score=score,
-                    priority_tier=tier,
-                    created_at=now,
-                    updated_at=now,
-                )
+        if not batch:
+            break
+
+        for issue, pub_name in batch:
+            iid = int(issue.id or 0)
+            last_id = iid
+            result.catalog_issues_scanned += 1
+
+            url, source = resolve_cover_url_for_issue_cached(
+                issue, cover_urls_by_issue=cover_urls_by_issue
             )
-            result.created += 1
-        else:
-            existing.priority_score = score
-            existing.priority_tier = tier
-            existing.source = source or existing.source
-            existing.updated_at = now
-            session.add(existing)
-            result.updated += 1
-        result.touched += 1
+            existing = assets_by_issue_url.get((iid, url)) if url else None
+            if not url:
+                result.skipped_no_url += 1
+            elif (iid, url) in complete_keys:
+                result.skipped_complete += 1
+            else:
+                score, tier = compute_priority_for_issue(
+                    session, issue, inventory_ids=inventory_ids, upc_ids=upc_ids, publisher_name=pub_name
+                )
+                if (
+                    existing is not None
+                    and existing.priority_score == score
+                    and existing.priority_tier == tier
+                    and (source or existing.source) == existing.source
+                ):
+                    result.skipped_unchanged += 1
+                else:
+                    now = utc_now()
+                    if existing is None:
+                        asset = CatalogCoverAsset(
+                            catalog_issue_id=iid,
+                            source=source or "UNKNOWN",
+                            source_url=url,
+                            status=COVER_ASSET_STATUS_PENDING,
+                            priority_score=score,
+                            priority_tier=tier,
+                            created_at=now,
+                            updated_at=now,
+                        )
+                        session.add(asset)
+                        assets_by_issue_url[(iid, url)] = asset
+                        result.created += 1
+                    else:
+                        existing.priority_score = score
+                        existing.priority_tier = tier
+                        existing.source = source or existing.source
+                        existing.updated_at = now
+                        session.add(existing)
+                        result.updated += 1
+
+                    result.touched += 1
+                    pending_commit += 1
+
+                    if pending_commit >= P104_SYNC_COMMIT_EVERY:
+                        t_commit = time.perf_counter()
+                        session.commit()
+                        timing.commit += time.perf_counter() - t_commit
+                        pending_commit = 0
+
+                    if result.touched >= sync_limit:
+                        if result.catalog_issues_scanned % P104_SYNC_PROGRESS_EVERY == 0:
+                            _print_sync_progress(
+                                scanned=result.catalog_issues_scanned,
+                                created=result.created,
+                                updated=result.updated,
+                                skipped_complete=result.skipped_complete,
+                                skipped_no_url=result.skipped_no_url,
+                                elapsed_s=time.perf_counter() - wall,
+                            )
+                        break
+
+            if result.catalog_issues_scanned % P104_SYNC_PROGRESS_EVERY == 0:
+                _print_sync_progress(
+                    scanned=result.catalog_issues_scanned,
+                    created=result.created,
+                    updated=result.updated,
+                    skipped_complete=result.skipped_complete,
+                    skipped_no_url=result.skipped_no_url,
+                    elapsed_s=time.perf_counter() - wall,
+                )
+
         if result.touched >= sync_limit:
             break
-    session.flush()
+
+    timing.issue_scan_and_upsert = time.perf_counter() - scan_start
+    if pending_commit > 0:
+        t_commit = time.perf_counter()
+        session.commit()
+        timing.commit += time.perf_counter() - t_commit
+    else:
+        session.flush()
+
+    timing.total = time.perf_counter() - wall
+    LOGGER.info(
+        "P104 sync complete limit=%s scanned=%s touched=%s timing=%s bottleneck=%s",
+        sync_limit,
+        result.catalog_issues_scanned,
+        result.touched,
+        timing.to_dict(),
+        timing.bottleneck_label(),
+    )
+    _print_sync_progress(
+        scanned=result.catalog_issues_scanned,
+        created=result.created,
+        updated=result.updated,
+        skipped_complete=result.skipped_complete,
+        skipped_no_url=result.skipped_no_url,
+        elapsed_s=timing.total,
+    )
     return result
 
 
@@ -608,6 +831,7 @@ def hydrate_cover_asset(
     rate_limiter: GlobalDownloadRateLimiter | None = None,
     staging_path: Path | None = None,
     timing: HydrateStageTiming | None = None,
+    hydration_run_id: int | None = None,
 ) -> str:
     if asset.status == COVER_ASSET_STATUS_COMPLETE and asset.verified_at is not None and not reprocess:
         return COVER_ASSET_STATUS_COMPLETE
@@ -661,6 +885,8 @@ def hydrate_cover_asset(
         asset.verified_at = now
         asset.last_error = None
         asset.updated_at = now
+        if hydration_run_id is not None:
+            asset.last_hydration_run_id = int(hydration_run_id)
         t_db = time.perf_counter()
         session.add(asset)
         session.flush()
@@ -719,23 +945,71 @@ def _download_asset_to_staging(
         return _StagingDownloadResult(asset_id, error=str(exc), timing=timing)
 
 
-def _bump_run_counters(engine: Any, run_id: int, outcome: str, run_lock: threading.Lock) -> CatalogCoverHydrationRun | None:
-    with run_lock:
-        with Session(engine, expire_on_commit=False) as session:
-            run = session.get(CatalogCoverHydrationRun, run_id)
-            if run is None:
-                return None
+def _reload_hydration_run(session: Session, run_id: int) -> CatalogCoverHydrationRun:
+    session.expire_all()
+    run = session.get(CatalogCoverHydrationRun, run_id)
+    if run is None:
+        raise RuntimeError(f"hydration run {run_id} missing")
+    session.refresh(run)
+    return run
+
+
+class _RunCounterAccumulator:
+    """Batch run counter DB updates (concurrent hydration)."""
+
+    def __init__(self, engine: Any, run_id: int, *, flush_every: int = P104_RUN_COUNTER_FLUSH_EVERY) -> None:
+        self._engine = engine
+        self._run_id = run_id
+        self._flush_every = max(1, flush_every)
+        self._lock = threading.Lock()
+        self._pending_completed = 0
+        self._pending_downloaded = 0
+        self._pending_failed = 0
+        self._pending_skipped = 0
+        self._since_flush = 0
+
+    def record(self, outcome: str) -> None:
+        with self._lock:
             if outcome == COVER_ASSET_STATUS_COMPLETE:
-                run.completed += 1
-                run.downloaded += 1
+                self._pending_completed += 1
+                self._pending_downloaded += 1
             elif outcome == COVER_ASSET_STATUS_SKIPPED_NO_URL:
-                run.skipped_no_url += 1
+                self._pending_skipped += 1
             elif outcome == COVER_ASSET_STATUS_FAILED:
-                run.failed += 1
+                self._pending_failed += 1
+            else:
+                return
+            self._since_flush += 1
+            if self._since_flush >= self._flush_every:
+                self._flush_locked()
+
+    def flush(self) -> None:
+        with self._lock:
+            self._flush_locked()
+
+    def _flush_locked(self) -> None:
+        if (
+            self._pending_completed == 0
+            and self._pending_downloaded == 0
+            and self._pending_failed == 0
+            and self._pending_skipped == 0
+        ):
+            return
+        with Session(self._engine, expire_on_commit=False) as session:
+            run = session.get(CatalogCoverHydrationRun, self._run_id)
+            if run is None:
+                return
+            run.completed += self._pending_completed
+            run.downloaded += self._pending_downloaded
+            run.failed += self._pending_failed
+            run.skipped_no_url += self._pending_skipped
             session.add(run)
             session.commit()
-            session.refresh(run)
-            return run
+        self._pending_completed = 0
+        self._pending_downloaded = 0
+        self._pending_failed = 0
+        self._pending_skipped = 0
+        self._since_flush = 0
 
 
 def _process_staged_asset(
@@ -745,7 +1019,7 @@ def _process_staged_asset(
     *,
     reprocess: bool,
     perf: P104PerformanceSummary,
-    run_lock: threading.Lock,
+    counter_acc: _RunCounterAccumulator,
 ) -> tuple[int, str, CatalogCoverAsset | None]:
     timing = download.timing
     t_asset = time.perf_counter()
@@ -756,7 +1030,7 @@ def _process_staged_asset(
         asset = session.get(CatalogCoverAsset, download.asset_id)
         if asset is None:
             perf.add(timing)
-            _bump_run_counters(engine, run_id, COVER_ASSET_STATUS_FAILED, run_lock)
+            counter_acc.record(COVER_ASSET_STATUS_FAILED)
             return download.asset_id, COVER_ASSET_STATUS_FAILED, None
         asset_ref = asset
 
@@ -790,6 +1064,7 @@ def _process_staged_asset(
                 reprocess=reprocess,
                 staging_path=download.staging_path,
                 timing=timing,
+                hydration_run_id=run_id,
             )
             t_db = time.perf_counter()
             session.commit()
@@ -799,7 +1074,7 @@ def _process_staged_asset(
         perf.add(timing)
 
     if not download.skip_processing:
-        _bump_run_counters(engine, run_id, outcome, run_lock)
+        counter_acc.record(outcome)
     return download.asset_id, outcome, asset_ref
 
 
@@ -814,12 +1089,12 @@ def _run_p104_hydration_concurrent(
     reprocess: bool,
     perf: P104PerformanceSummary,
     on_asset_processed: Callable[[int, CatalogCoverAsset, CatalogCoverHydrationRun, str], None] | None,
-) -> None:
+) -> _RunCounterAccumulator:
     run_id = int(run.id or 0)
     staging_root = P104_LOG_DIR / f"staging_run_{run_id}"
     staging_root.mkdir(parents=True, exist_ok=True)
     rate_limiter = GlobalDownloadRateLimiter(downloads_per_minute)
-    run_lock = threading.Lock()
+    counter_acc = _RunCounterAccumulator(engine, run_id)
     processed_lock = threading.Lock()
     processed_index = 0
 
@@ -831,9 +1106,9 @@ def _run_p104_hydration_concurrent(
             processed_index += 1
             index = processed_index
         with Session(engine, expire_on_commit=False) as session:
-            run_row = session.get(CatalogCoverHydrationRun, run_id)
+            run_row = _reload_hydration_run(session, run_id)
             asset_row = session.get(CatalogCoverAsset, asset_id) or asset_hint
-            if run_row is not None and asset_row is not None:
+            if asset_row is not None:
                 on_asset_processed(index, asset_row, run_row, outcome)
 
     with ThreadPoolExecutor(max_workers=max(1, download_workers)) as download_pool:
@@ -860,12 +1135,15 @@ def _run_p104_hydration_concurrent(
                         dl_result,
                         reprocess=reprocess,
                         perf=perf,
-                        run_lock=run_lock,
+                        counter_acc=counter_acc,
                     )
                 )
             for proc_future in as_completed(process_futures):
                 asset_id, outcome, asset_hint = proc_future.result()
                 _notify(asset_id, outcome, asset_hint)
+
+    counter_acc.flush()
+    return counter_acc
 
 
 def _hydration_progress_summary(
@@ -905,10 +1183,11 @@ def _start_run(session: Session, *, mode: str, limit: int) -> CatalogCoverHydrat
     return run
 
 
-def _finish_run(session: Session, run: CatalogCoverHydrationRun, *, log_payload: dict) -> CatalogCoverHydrationRun:
+def _finish_run(session: Session, run_id: int, *, log_payload: dict) -> CatalogCoverHydrationRun:
     P104_LOG_DIR.mkdir(parents=True, exist_ok=True)
-    log_path = P104_LOG_DIR / f"run_{int(run.id or 0)}.json"
+    log_path = P104_LOG_DIR / f"run_{run_id}.json"
     log_path.write_text(json.dumps(log_payload, indent=2, default=str), encoding="utf-8")
+    run = _reload_hydration_run(session, run_id)
     run.log_path = str(log_path)
     run.finished_at = utc_now()
     run.status = HYDRATION_RUN_STATUS_COMPLETED
@@ -1010,7 +1289,6 @@ def run_p104_hydration(
     run_id = int(run.id or 0)
 
     if use_concurrency:
-        session.refresh(run)
         _run_p104_hydration_concurrent(
             engine,
             run,
@@ -1023,6 +1301,7 @@ def run_p104_hydration(
             on_asset_processed=on_asset_processed,
         )
     else:
+        commits_since_flush = 0
         for index, asset in enumerate(work, start=1):
             timing: HydrateStageTiming | None = None
             t_asset = time.perf_counter()
@@ -1035,6 +1314,7 @@ def run_p104_hydration(
                 reprocess=reprocess,
                 rate_limiter=rate_limiter if not dry_run else None,
                 timing=timing,
+                hydration_run_id=run_id if not dry_run else None,
             )
             if outcome == COVER_ASSET_STATUS_COMPLETE:
                 run.completed += 1
@@ -1043,19 +1323,26 @@ def run_p104_hydration(
                 run.skipped_no_url += 1
             elif outcome == COVER_ASSET_STATUS_FAILED:
                 run.failed += 1
-            t_db = time.perf_counter()
             session.add(run)
-            session.commit()
-            if timing is not None:
+            commits_since_flush += 1
+            should_commit = commits_since_flush >= P104_SEQUENTIAL_COMMIT_EVERY or index == len(work)
+            if should_commit:
+                t_db = time.perf_counter()
+                session.commit()
+                if timing is not None:
+                    timing.db_update_commit += time.perf_counter() - t_db
+                commits_since_flush = 0
+            elif timing is not None:
+                t_db = time.perf_counter()
+                session.flush()
                 timing.db_update_commit += time.perf_counter() - t_db
+            if timing is not None:
                 timing.total = time.perf_counter() - t_asset
                 perf.add(timing)
             if on_asset_processed is not None:
                 on_asset_processed(index, asset, run, outcome)
 
-    run = session.get(CatalogCoverHydrationRun, run_id)
-    if run is None:
-        raise RuntimeError("hydration run missing after batch")
+    run = _reload_hydration_run(session, run_id)
 
     elapsed = time.perf_counter() - wall_start
     progress_summary = _hydration_progress_summary(
@@ -1083,14 +1370,150 @@ def run_p104_hydration(
         "process_workers": pw,
         "downloads_per_minute": dpm,
         "queue_counts": asset_status_counts(session),
+        "queue_counts_at": utc_now().isoformat(),
+        "run_asset_complete_count": _count_assets_for_run(session, run_id),
         "progress": progress_summary,
         "performance": perf.to_dict(),
     }
     if not dry_run:
-        _finish_run(session, run, log_payload=summary)
+        _finish_run(session, run_id, log_payload=summary)
         session.commit()
+        run = _reload_hydration_run(session, run_id)
         summary["log_path"] = run.log_path
     return summary
+
+
+def _count_assets_for_run(session: Session, run_id: int) -> int:
+    row = session.exec(
+        select(func.count())
+        .select_from(CatalogCoverAsset)
+        .where(CatalogCoverAsset.last_hydration_run_id == int(run_id))
+        .where(CatalogCoverAsset.status == COVER_ASSET_STATUS_COMPLETE)
+    ).one()
+    return int(row[0] if isinstance(row, tuple) else row)
+
+
+def _sync_run_counters_from_assets(session: Session, run_id: int) -> CatalogCoverHydrationRun:
+    run = _reload_hydration_run(session, run_id)
+    complete = session.exec(
+        select(func.count())
+        .select_from(CatalogCoverAsset)
+        .where(CatalogCoverAsset.last_hydration_run_id == int(run_id))
+        .where(CatalogCoverAsset.status == COVER_ASSET_STATUS_COMPLETE)
+    ).one()
+    failed = session.exec(
+        select(func.count())
+        .select_from(CatalogCoverAsset)
+        .where(CatalogCoverAsset.last_hydration_run_id == int(run_id))
+        .where(CatalogCoverAsset.status == COVER_ASSET_STATUS_FAILED)
+    ).one()
+    skipped = session.exec(
+        select(func.count())
+        .select_from(CatalogCoverAsset)
+        .where(CatalogCoverAsset.last_hydration_run_id == int(run_id))
+        .where(CatalogCoverAsset.status == COVER_ASSET_STATUS_SKIPPED_NO_URL)
+    ).one()
+    run.completed = int(complete[0] if isinstance(complete, tuple) else complete)
+    run.downloaded = run.completed
+    run.failed = int(failed[0] if isinstance(failed, tuple) else failed)
+    run.skipped_no_url = int(skipped[0] if isinstance(skipped, tuple) else skipped)
+    session.add(run)
+    session.commit()
+    session.refresh(run)
+    return run
+
+
+def reconcile_p104_hydration_run(
+    session: Session,
+    run_id: int,
+    *,
+    dry_run: bool = False,
+    resync_run_counters: bool = True,
+) -> dict[str, Any]:
+    """Mark assets complete when on-disk derivatives exist; optionally fix run counters."""
+    run = session.get(CatalogCoverHydrationRun, run_id)
+    if run is None:
+        raise ValueError(f"hydration run {run_id} not found")
+
+    staging_root = P104_LOG_DIR / f"staging_run_{run_id}"
+    candidate_ids: set[int] = set()
+    if staging_root.is_dir():
+        for path in staging_root.glob("*.bin"):
+            if path.stem.isdigit():
+                candidate_ids.add(int(path.stem))
+
+    stale_statuses = (
+        COVER_ASSET_STATUS_PENDING,
+        COVER_ASSET_STATUS_DOWNLOADING,
+        COVER_ASSET_STATUS_FAILED,
+    )
+    if candidate_ids:
+        rows = session.exec(select(CatalogCoverAsset).where(CatalogCoverAsset.id.in_(candidate_ids))).all()
+    else:
+        rows = []
+
+    repaired: list[int] = []
+    already_ok: list[int] = []
+    still_missing_files: list[int] = []
+
+    for asset in rows:
+        aid = int(asset.id or 0)
+        if asset.status not in stale_statuses:
+            if asset.status == COVER_ASSET_STATUS_COMPLETE and asset.last_hydration_run_id == run_id:
+                already_ok.append(aid)
+            continue
+        if asset.medium_path and asset.original_path:
+            ok, _missing = verify_asset_files(asset)
+        else:
+            base_dir = _asset_dir(session, int(asset.catalog_issue_id), aid)
+            medium = base_dir / "medium.jpg"
+            ok = medium.is_file()
+            if ok and not dry_run:
+                asset.medium_path = str(medium)
+                orig = base_dir / "original.bin"
+                if orig.is_file():
+                    asset.original_path = str(orig)
+        if not ok:
+            still_missing_files.append(aid)
+            continue
+        if asset.status == COVER_ASSET_STATUS_COMPLETE and asset.last_hydration_run_id == run_id:
+            already_ok.append(aid)
+            continue
+        if dry_run:
+            repaired.append(aid)
+            continue
+        now = utc_now()
+        asset.status = COVER_ASSET_STATUS_COMPLETE
+        asset.last_hydration_run_id = int(run_id)
+        asset.downloaded_at = asset.downloaded_at or now
+        asset.verified_at = now
+        asset.last_error = None
+        asset.updated_at = now
+        session.add(asset)
+        repaired.append(aid)
+
+    if not dry_run and repaired:
+        session.commit()
+
+    if resync_run_counters and not dry_run:
+        run = _sync_run_counters_from_assets(session, run_id)
+    elif resync_run_counters and dry_run:
+        run = _reload_hydration_run(session, run_id)
+
+    return {
+        "run_id": run_id,
+        "dry_run": dry_run,
+        "candidate_asset_ids": len(candidate_ids),
+        "repaired_asset_ids": repaired[:50],
+        "repaired_count": len(repaired),
+        "already_ok_count": len(already_ok),
+        "still_missing_files_count": len(still_missing_files),
+        "run_completed": int(run.completed),
+        "run_downloaded": int(run.downloaded),
+        "run_failed": int(run.failed),
+        "run_skipped_no_url": int(run.skipped_no_url),
+        "queue_counts": asset_status_counts(session),
+    }
 
 
 def p104_dashboard_metrics(session: Session) -> dict[str, Any]:

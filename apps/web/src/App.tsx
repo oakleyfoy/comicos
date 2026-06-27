@@ -17,6 +17,7 @@ import { CatalogUniversePage } from "./pages/CatalogUniversePage";
 import { CatalogImportDashboardPage } from "./pages/CatalogImportDashboardPage";
 import { CoverHydrationDashboardPage } from "./pages/CoverHydrationDashboardPage";
 import { GcdEnrichmentDashboardPage } from "./pages/GcdEnrichmentDashboardPage";
+import { GcdIdentityBackfillDashboardPage } from "./pages/GcdIdentityBackfillDashboardPage";
 import { MasterUniversePage } from "./pages/MasterUniversePage";
 import { IntegrationsPage } from "./pages/IntegrationsPage";
 import { AccountSettingsPage } from "./pages/AccountSettingsPage";
@@ -492,6 +493,7 @@ export default function App() {
         <Route path="/catalog-universe" element={<CatalogUniversePage />} />
         <Route path="/catalog/import" element={<CatalogImportDashboardPage />} />
         <Route path="/catalog/enrichment" element={<GcdEnrichmentDashboardPage />} />
+        <Route path="/catalog/gcd-identity-backfill" element={<GcdIdentityBackfillDashboardPage />} />
         <Route path="/catalog/cover-hydration" element={<CoverHydrationDashboardPage />} />
         <Route path="/universe" element={<MasterUniversePage />} />
         <Route path="/catalog-universe/placeholders" element={<PlaceholderMatchQueuePage />} />

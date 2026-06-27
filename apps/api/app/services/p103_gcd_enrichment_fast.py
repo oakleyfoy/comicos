@@ -18,10 +18,34 @@ from app.services.p101_modern_catalog_audit_service import canonical_focus_publi
 from app.services.p102_gcd_modern_acquisition_service import YEAR_EXPR
 from app.services.p103_gcd_catalog_enrichment_service import EnrichmentFilters, P103DryRunReport
 from app.services.p103_gcd_enrichment_helpers import (
+    effective_catalog_issue_year,
     extract_gcd_issue_id,
     gcd_row_to_plan_inputs,
     is_blank,
 )
+
+_CATALOG_ENRICHMENT_SELECT = """
+    SELECT issue_id, year, publisher_id, series_id, publisher_norm, series_norm, issue_norm,
+           publisher_name, series_name, issue_number, cover_date, release_date, store_date,
+           title, description, external_source_ids, variant_printing, variant_variant_name, has_upc
+    FROM catalog_enrichment_issue
+"""
+
+# Effective publication year from denormalized year column or ISO-ish date strings in cache.
+_CATALOG_ENRICHMENT_YEAR_WHERE = """
+WHERE COALESCE(
+  year,
+  CASE WHEN cover_date IS NOT NULL AND length(cover_date) >= 4
+            AND substr(cover_date, 1, 4) GLOB '[0-9][0-9][0-9][0-9]'
+       THEN CAST(substr(cover_date, 1, 4) AS INTEGER) END,
+  CASE WHEN release_date IS NOT NULL AND length(release_date) >= 4
+            AND substr(release_date, 1, 4) GLOB '[0-9][0-9][0-9][0-9]'
+       THEN CAST(substr(release_date, 1, 4) AS INTEGER) END,
+  CASE WHEN store_date IS NOT NULL AND length(store_date) >= 4
+            AND substr(store_date, 1, 4) GLOB '[0-9][0-9][0-9][0-9]'
+       THEN CAST(substr(store_date, 1, 4) AS INTEGER) END
+) BETWEEN ? AND ?
+"""
 
 MAX_ENRICHMENT_LARGE_WRITE_LIMIT = 50_000
 
@@ -385,31 +409,63 @@ def _lookup_gcd(index: _GcdIndex, snap: EnrichmentIssueSnapshot) -> dict[str, An
     return scored[0][2]
 
 
+def _snapshot_from_enrichment_row(row: tuple) -> EnrichmentIssueSnapshot:
+    publisher_name = str(row[7] or "")
+    ext_raw = row[15]
+    try:
+        ext = json.loads(ext_raw) if ext_raw else {}
+    except json.JSONDecodeError:
+        ext = {}
+    eff_year = effective_catalog_issue_year(
+        year=int(row[1]) if row[1] is not None else None,
+        cover_date=row[10],
+        release_date=row[11],
+        store_date=row[12],
+    )
+    return EnrichmentIssueSnapshot(
+        issue_id=int(row[0]),
+        year=eff_year,
+        publisher_id=int(row[2]) if row[2] is not None else None,
+        series_id=int(row[3]) if row[3] is not None else None,
+        publisher_norm=str(row[4]),
+        series_norm=str(row[5]),
+        issue_norm=str(row[6]),
+        publisher_name=publisher_name,
+        series_name=str(row[8] or ""),
+        issue_number=str(row[9] or ""),
+        cover_date=row[10],
+        release_date=row[11],
+        store_date=row[12],
+        title=row[13],
+        description=row[14],
+        external_source_ids=ext,
+        variant_printing=row[16],
+        variant_variant_name=row[17],
+        has_upc=bool(row[18]),
+    )
+
+
+def _fetch_enrichment_rows(cache_path: Path, *, filters: EnrichmentFilters) -> list[tuple]:
+    conn = sqlite3.connect(cache_path)
+    if filters.all_catalog and not filters.year_filter_explicit:
+        rows = conn.execute(f"{_CATALOG_ENRICHMENT_SELECT} ORDER BY issue_id").fetchall()
+    elif filters.year_filter_explicit:
+        rows = conn.execute(
+            f"{_CATALOG_ENRICHMENT_SELECT} {_CATALOG_ENRICHMENT_YEAR_WHERE} ORDER BY issue_id",
+            (filters.year_from, filters.year_to),
+        ).fetchall()
+    else:
+        rows = conn.execute(f"{_CATALOG_ENRICHMENT_SELECT} ORDER BY issue_id").fetchall()
+    conn.close()
+    return list(rows)
+
+
 def _load_catalog_scope(
     cache_path: Path,
     *,
     filters: EnrichmentFilters,
 ) -> list[EnrichmentIssueSnapshot]:
-    conn = sqlite3.connect(cache_path)
-    base_select = """
-        SELECT issue_id, year, publisher_id, series_id, publisher_norm, series_norm, issue_norm,
-               publisher_name, series_name, issue_number, cover_date, release_date, store_date,
-               title, description, external_source_ids, variant_printing, variant_variant_name, has_upc
-        FROM catalog_enrichment_issue
-    """
-    if filters.all_catalog and not filters.year_filter_explicit:
-        rows = conn.execute(f"{base_select} ORDER BY issue_id").fetchall()
-    elif filters.all_catalog and filters.year_filter_explicit:
-        rows = conn.execute(
-            f"{base_select} WHERE year IS NOT NULL AND year BETWEEN ? AND ? ORDER BY issue_id",
-            (filters.year_from, filters.year_to),
-        ).fetchall()
-    else:
-        rows = conn.execute(
-            f"{base_select} WHERE year IS NOT NULL AND year BETWEEN ? AND ? ORDER BY issue_id",
-            (filters.year_from, filters.year_to),
-        ).fetchall()
-    conn.close()
+    rows = _fetch_enrichment_rows(cache_path, filters=filters)
     out: list[EnrichmentIssueSnapshot] = []
     for row in rows:
         publisher_name = str(row[7] or "")
@@ -417,35 +473,25 @@ def _load_catalog_scope(
             focus = canonical_focus_publisher_label(publisher_name)
             if focus != filters.publisher:
                 continue
-        ext_raw = row[15]
-        try:
-            ext = json.loads(ext_raw) if ext_raw else {}
-        except json.JSONDecodeError:
-            ext = {}
-        out.append(
-            EnrichmentIssueSnapshot(
-                issue_id=int(row[0]),
+        if filters.year_filter_explicit:
+            eff = effective_catalog_issue_year(
                 year=int(row[1]) if row[1] is not None else None,
-                publisher_id=int(row[2]) if row[2] is not None else None,
-                series_id=int(row[3]) if row[3] is not None else None,
-                publisher_norm=str(row[4]),
-                series_norm=str(row[5]),
-                issue_norm=str(row[6]),
-                publisher_name=publisher_name,
-                series_name=str(row[8] or ""),
-                issue_number=str(row[9] or ""),
                 cover_date=row[10],
                 release_date=row[11],
                 store_date=row[12],
-                title=row[13],
-                description=row[14],
-                external_source_ids=ext,
-                variant_printing=row[16],
-                variant_variant_name=row[17],
-                has_upc=bool(row[18]),
             )
-        )
+            if eff is None or eff < filters.year_from or eff > filters.year_to:
+                continue
+        out.append(_snapshot_from_enrichment_row(row))
     return out
+
+
+def load_catalog_enrichment_rows(cache_path: Path) -> list[tuple]:
+    """All rows in catalog_enrichment_issue (diagnostics / P103.5 scope)."""
+    conn = sqlite3.connect(cache_path)
+    rows = conn.execute(f"{_CATALOG_ENRICHMENT_SELECT} ORDER BY issue_id").fetchall()
+    conn.close()
+    return list(rows)
 
 
 def load_catalog_enrichment_scope(cache_path: Path, *, filters: EnrichmentFilters) -> list[EnrichmentIssueSnapshot]:

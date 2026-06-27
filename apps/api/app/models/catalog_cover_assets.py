@@ -56,6 +56,7 @@ class CatalogCoverAsset(SQLModel, table=True):
     next_retry_at: datetime | None = Field(default=None, sa_column=Column(DateTime(timezone=True), nullable=True))
     downloaded_at: datetime | None = Field(default=None, sa_column=Column(DateTime(timezone=True), nullable=True))
     verified_at: datetime | None = Field(default=None, sa_column=Column(DateTime(timezone=True), nullable=True))
+    last_hydration_run_id: int | None = Field(default=None, nullable=True, index=True)
     created_at: datetime = Field(default_factory=utc_now, sa_column=Column(DateTime(timezone=True), nullable=False))
     updated_at: datetime = Field(default_factory=utc_now, sa_column=Column(DateTime(timezone=True), nullable=False))
 

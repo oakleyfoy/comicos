@@ -13,9 +13,11 @@ from app.models.catalog_master import CatalogImage, CatalogIssue, CatalogPublish
 from app.models.catalog_cover_assets import CatalogCoverAsset, COVER_ASSET_STATUS_COMPLETE
 from app.services.p104_cover_hydration_service import (
     _comicvine_cover_from_external_ids,
+    _preload_cover_urls_by_issue,
     compute_priority_for_issue,
     hydrate_cover_asset,
     resolve_cover_url_for_issue,
+    resolve_cover_url_for_issue_cached,
     run_p104_dry_run,
     run_p104_hydration,
     sync_cover_assets_batch,
@@ -148,6 +150,34 @@ def _seed_issue_with_cover(session: Session, n: int, base: str = "https://exampl
     return issues
 
 
+def test_sync_reports_timing(session: Session) -> None:
+    _seed_issue_with_cover(session, 3)
+    result = sync_cover_assets_batch(session, sync_limit=2)
+    assert result.touched == 2
+    assert result.timing is not None
+    assert result.timing.total >= 0
+    assert "cover_url_preload" in result.to_dict()["timing"]
+
+
+def test_resolve_cover_url_cached_matches_db(session: Session) -> None:
+    issue = _seed_issue(session)
+    session.add(
+        CatalogImage(
+            issue_id=int(issue.id),
+            source_url="https://example.com/cached.jpg",
+            image_type="cover",
+            source="TEST",
+            download_status="pending",
+        )
+    )
+    session.commit()
+    session.refresh(issue)
+    cover_map = _preload_cover_urls_by_issue(session)
+    url_db, _ = resolve_cover_url_for_issue(session, issue)
+    url_cached, _ = resolve_cover_url_for_issue_cached(issue, cover_urls_by_issue=cover_map)
+    assert url_db == url_cached
+
+
 def test_sync_limit_expands_queue_without_duplicating_completed(session: Session) -> None:
     issues = _seed_issue_with_cover(session, 8)
     first = sync_cover_assets_batch(session, sync_limit=3)
@@ -238,7 +268,81 @@ def test_run_hydration_records_stage_performance(session: Session) -> None:
             downloads_per_minute=600.0,
         )
     assert summary["completed"] >= 2
+    assert summary["downloaded"] >= 2
     perf = summary["performance"]
     assert perf["assets_timed"] >= 2
     assert "derivative_resize_write" in perf["totals_seconds"]
     assert summary["progress"]["covers_per_minute"] >= 0
+    assert summary["run_asset_complete_count"] >= 2
+
+
+def test_concurrent_run_summary_matches_db(session: Session) -> None:
+    _seed_issue_with_cover(session, 4)
+    sync_cover_assets_batch(session, sync_limit=4)
+    session.commit()
+    with patch(
+        "app.services.p104_cover_hydration_service._download_bytes",
+        return_value=(_tiny_jpeg_bytes(), "image/jpeg"),
+    ):
+        summary = run_p104_hydration(
+            session,
+            limit=4,
+            download_workers=2,
+            process_workers=2,
+            downloads_per_minute=600.0,
+        )
+    assert summary["performance"]["assets_timed"] >= 4
+    assert summary["completed"] >= 4
+    assert summary["downloaded"] >= 4
+    assert summary["completed"] == summary["run_asset_complete_count"]
+    run_id = int(summary["run_id"])
+    assets = session.exec(
+        select(CatalogCoverAsset).where(CatalogCoverAsset.last_hydration_run_id == run_id)
+    ).all()
+    assert len(assets) >= 4
+    assert all(a.status == COVER_ASSET_STATUS_COMPLETE for a in assets)
+
+
+def test_reconcile_marks_complete_when_files_exist(session: Session, tmp_path: Path, monkeypatch) -> None:
+    issues = _seed_issue_with_cover(session, 1)
+    sync_cover_assets_batch(session, sync_limit=1)
+    session.commit()
+    asset = session.exec(select(CatalogCoverAsset)).first()
+    assert asset is not None
+
+    from app.models.catalog_cover_assets import CatalogCoverHydrationRun, HYDRATION_RUN_STATUS_COMPLETED, utc_now
+
+    run = CatalogCoverHydrationRun(mode="hydrate", limit=1, status=HYDRATION_RUN_STATUS_COMPLETED, queued=1)
+    session.add(run)
+    session.commit()
+    run_id = int(run.id or 0)
+
+    monkeypatch.setattr(
+        "app.services.p104_cover_hydration_service.P104_LOG_DIR",
+        tmp_path / "runs",
+    )
+    staging = tmp_path / "runs" / f"staging_run_{run_id}"
+    staging.mkdir(parents=True)
+    (staging / f"{int(asset.id)}.bin").write_bytes(_tiny_jpeg_bytes())
+
+    with patch(
+        "app.services.p104_cover_hydration_service._download_bytes",
+        return_value=(_tiny_jpeg_bytes(), "image/jpeg"),
+    ):
+        from app.services.p104_cover_hydration_service import hydrate_cover_asset
+
+        hydrate_cover_asset(session, asset, hydration_run_id=run_id)
+        session.commit()
+
+    asset.status = "downloading"
+    asset.last_hydration_run_id = None
+    session.add(asset)
+    session.commit()
+
+    from app.services.p104_cover_hydration_service import reconcile_p104_hydration_run
+
+    report = reconcile_p104_hydration_run(session, run_id, dry_run=False)
+    session.refresh(asset)
+    assert asset.status == COVER_ASSET_STATUS_COMPLETE
+    assert asset.last_hydration_run_id == run_id
+    assert report["repaired_count"] >= 1

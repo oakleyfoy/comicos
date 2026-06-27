@@ -1140,6 +1140,7 @@ from app.api.gpt_comic_read import attach_gpt_comic_read_layer
 from app.api.catalog_universe import attach_catalog_universe_layer
 from app.api.catalog_import_dashboard import attach_catalog_import_dashboard_layer
 from app.api.gcd_enrichment_dashboard import attach_gcd_enrichment_dashboard_layer
+from app.api.gcd_identity_backfill_dashboard import attach_gcd_identity_backfill_dashboard_layer
 from app.api.nav_route_compat import attach_nav_route_compat_layer
 from app.api.p104_cover_hydration_dashboard import attach_p104_cover_hydration_dashboard_layer
 from app.api.master_universe import attach_master_universe_layer
@@ -1388,6 +1389,7 @@ attach_gpt_comic_read_layer(app)
 attach_catalog_universe_layer(app)
 attach_catalog_import_dashboard_layer(app)
 attach_gcd_enrichment_dashboard_layer(app)
+attach_gcd_identity_backfill_dashboard_layer(app)
 attach_nav_route_compat_layer(app)
 attach_p104_cover_hydration_dashboard_layer(app)
 attach_master_universe_layer(app)

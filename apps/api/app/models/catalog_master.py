@@ -105,7 +105,10 @@ class CatalogUpc(SQLModel, table=True):
 
 class CatalogImage(SQLModel, table=True):
     __tablename__ = "catalog_image"
-    __table_args__ = (SAIndex("ix_catalog_image_issue_id", "issue_id"),)
+    __table_args__ = (
+        SAIndex("ix_catalog_image_issue_id", "issue_id"),
+        SAIndex("ix_catalog_image_issue_type", "issue_id", "image_type"),
+    )
 
     id: int | None = Field(default=None, primary_key=True)
     issue_id: int | None = Field(default=None, foreign_key="catalog_issue.id", nullable=True)

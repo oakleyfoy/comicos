@@ -25,7 +25,7 @@ P101_YEAR_MAX = 2026
 # Canonical report labels → normalized publisher keys (subset of P97 weights).
 _FOCUS_PUBLISHER_VARIANTS: tuple[tuple[str, tuple[str, ...]], ...] = (
     ("Marvel", ("marvel", "marvel comics")),
-    ("DC", ("dc", "dc comics")),
+    ("DC", ("dc", "dc comics", "dc comics inc")),
     ("Image", ("image", "image comics")),
     ("Dark Horse", ("dark horse", "dark horse comics")),
     ("IDW", ("idw", "idw publishing")),

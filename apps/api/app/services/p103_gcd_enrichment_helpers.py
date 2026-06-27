@@ -20,14 +20,60 @@ from app.services.p102_gcd_modern_acquisition_service import _REPRINT_DIGEST, _V
 _GCD_ID_RE = re.compile(r"^\d+$")
 
 
+def year_from_date_field(value: date | str | None) -> int | None:
+    if value is None:
+        return None
+    if isinstance(value, date):
+        y = int(value.year)
+        return y if 1800 <= y <= 2100 else None
+    text = str(value).strip()
+    if len(text) >= 4 and text[0:4].isdigit():
+        y = int(text[0:4])
+        return y if 1800 <= y <= 2100 else None
+    return None
+
+
+def effective_catalog_issue_year(
+    *,
+    year: int | None,
+    cover_date: date | str | None = None,
+    release_date: date | str | None = None,
+    store_date: date | str | None = None,
+    publication_date: date | str | None = None,
+) -> int | None:
+    if year is not None:
+        y = int(year)
+        return y if 1800 <= y <= 2100 else None
+    for field in (cover_date, release_date, store_date, publication_date):
+        parsed = year_from_date_field(field)
+        if parsed is not None:
+            return parsed
+    return None
+
+
 def extract_gcd_issue_id(external_source_ids: dict | None) -> int | None:
-    if not isinstance(external_source_ids, dict):
+    if not isinstance(external_source_ids, dict) or not external_source_ids:
         return None
     bucket = external_source_ids.get(GCD_SOURCE)
     if isinstance(bucket, dict):
         for key in bucket:
             if _GCD_ID_RE.match(str(key)):
                 return int(key)
+    for src_key in ("gcd", "GCD"):
+        nested = external_source_ids.get(src_key)
+        if isinstance(nested, dict):
+            issue_id = nested.get("issue_id")
+            if issue_id is not None and _GCD_ID_RE.match(str(issue_id)):
+                return int(issue_id)
+    top = external_source_ids.get("gcd_issue_id")
+    if top is not None and _GCD_ID_RE.match(str(top)):
+        return int(top)
+    sources = external_source_ids.get("sources")
+    if isinstance(sources, dict):
+        for key in ("gcd", "GCD"):
+            val = sources.get(key)
+            if val is not None and _GCD_ID_RE.match(str(val)):
+                return int(val)
     return None
 
 

@@ -148,6 +148,7 @@ export const NAV_GROUPS: NavGroup[] = [
       { label: "Universe Tree", to: "/catalog-universe", prominent: true },
       { label: "GCD Import Dashboard", to: "/catalog/import", prominent: true },
       { label: "GCD Enrichment (P103)", to: "/catalog/enrichment", prominent: true },
+      { label: "GCD Identity Backfill", to: "/catalog/gcd-identity-backfill", prominent: true },
       { label: "Cover Hydration (P104)", to: "/catalog/cover-hydration", prominent: true },
       { label: "Placeholder Match Queue", to: "/catalog-universe/placeholders" },
     ],
@@ -223,7 +224,9 @@ export function findGroupIdForPath(pathname: string): string | null {
     pathname === "/catalog/import" ||
     pathname.startsWith("/catalog/import/") ||
     pathname === "/catalog/enrichment" ||
-    pathname.startsWith("/catalog/enrichment/")
+    pathname.startsWith("/catalog/enrichment/") ||
+    pathname === "/catalog/gcd-identity-backfill" ||
+    pathname.startsWith("/catalog/gcd-identity-backfill/")
   ) {
     return "catalog";
   }
