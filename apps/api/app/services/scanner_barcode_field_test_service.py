@@ -152,6 +152,11 @@ class ScannerBarcodeResolutionTrace:
     comicvine_fallback_called: bool = False
     gap_diagnosis: dict[str, Any] | None = field(default=None, repr=False)
     match_source: str | None = None
+    p105_snapshot: dict[str, Any] | None = field(default=None, repr=False)
+    partial_barcode: bool = False
+    decode_review_reason: str | None = None
+    fingerprint_top_issue_id: int | None = None
+    fingerprint_top_confidence: float | None = None
 
     def apply_p106_diagnosis(self, diagnosis: dict[str, Any] | None, *, gcd_path: Path | None) -> None:
         if not diagnosis:
@@ -218,6 +223,11 @@ def build_scanner_barcode_event(
         "p106_auto_attached": trace.p106_auto_attached,
         "comicvine_fallback_called": trace.comicvine_fallback_called,
         "match_source": trace.match_source or item.match_source,
+        "partial_barcode": trace.partial_barcode,
+        "p105_snapshot": trace.p105_snapshot,
+        "decode_review_reason": trace.decode_review_reason,
+        "fingerprint_top_issue_id": trace.fingerprint_top_issue_id,
+        "fingerprint_top_confidence": trace.fingerprint_top_confidence,
         "final_status": final_status,
         "final_catalog_issue_id": item.selected_catalog_issue_id,
         "final_title": item.matched_series,

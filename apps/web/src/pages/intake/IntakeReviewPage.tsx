@@ -69,8 +69,15 @@ function intakeHeadline(item: IntakeItem): string {
   const gap = intakeBarcodeGap(item);
   const gapSeries = typeof gap?.gcd_series === "string" ? gap.gcd_series.trim() : "";
   const gapNum = typeof gap?.gcd_issue_number === "string" ? gap.gcd_issue_number.trim() : "";
-  const series = item.matched_series?.trim() || gapSeries;
-  const num = item.matched_issue_number?.trim() || gapNum;
+  const gapAuthoritative =
+    gap?.action === "auto_import_available" ||
+    (typeof gap?.gcd_match_count === "number" && gap.gcd_match_count === 1);
+  const series = gapAuthoritative
+    ? gapSeries || item.matched_series?.trim() || ""
+    : item.matched_series?.trim() || gapSeries;
+  const num = gapAuthoritative
+    ? gapNum || item.matched_issue_number?.trim() || ""
+    : item.matched_issue_number?.trim() || gapNum;
   if (series) {
     return [series, num ? `#${num.replace(/^#/, "")}` : null].filter(Boolean).join(" ");
   }

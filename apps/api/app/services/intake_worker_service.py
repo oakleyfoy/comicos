@@ -72,6 +72,15 @@ from app.services.p105_comic_barcode_read_service import (
     read_comic_barcode_from_image_bytes,
 )
 from app.services.p100_comicvine_barcode_lookup_service import lookup_comicvine_by_barcode
+from app.services.intake_scanner_barcode_authority_service import (
+    PARTIAL_BARCODE_REASON,
+    barcode_decode_review_reason,
+    comic_barcode_scan_is_partial,
+    mark_partial_barcode_in_read_json,
+    p105_field_test_snapshot,
+    p106_gap_is_exact_barcode_authority,
+    sync_intake_display_from_p106_gap,
+)
 from app.services.photo_import_fingerprint_service import (
     fingerprint_match_score_for_crop_path,
     search_catalog_fingerprint_hits_for_crop_path,
@@ -449,6 +458,30 @@ def process_intake_item(session: Session, *, item_id: int) -> str:
         _stamp_item_barcode_identity(item, normalized)
         trace.scanned_barcode_raw = item.raw_barcode
         trace.normalized_barcode = normalized
+        trace.p105_snapshot = p105_field_test_snapshot(p105)
+
+        if comic_barcode_scan_is_partial(normalized=normalized, p105=p105):
+            trace.partial_barcode = True
+            item.barcode_read_json = mark_partial_barcode_in_read_json(item.barcode_read_json)
+            return _finish(
+                session,
+                item,
+                status=ITEM_NEEDS_REVIEW,
+                reason=PARTIAL_BARCODE_REASON,
+            )
+
+        from app.services.gcd_catalog_import_dashboard_service import resolve_gcd_path
+
+        gcd_path_for_decode = resolve_gcd_path(None)
+        decode_review = barcode_decode_review_reason(
+            p105=p105,
+            normalized=normalized,
+            gcd_path=gcd_path_for_decode,
+        )
+        if decode_review:
+            trace.decode_review_reason = decode_review
+            return _finish(session, item, status=ITEM_NEEDS_REVIEW, reason=decode_review)
+
         learned_probe, upc_probe = probe_local_barcode_hits(session, normalized_barcode=normalized)
         trace.learned_barcode_hit = learned_probe
         trace.local_catalog_upc_hit = upc_probe
@@ -475,13 +508,15 @@ def process_intake_item(session: Session, *, item_id: int) -> str:
             item.extension or "(none)",
         )
 
-        # Modern direct-market UPC without the 5-digit supplement is ambiguous.
+        # 12-digit-only direct-market prefixes handled by partial_barcode above.
         if direct_market_requires_supplement_key(normalized):
+            trace.partial_barcode = True
+            item.barcode_read_json = mark_partial_barcode_in_read_json(item.barcode_read_json)
             return _finish(
                 session,
                 item,
                 status=ITEM_NEEDS_REVIEW,
-                reason=f"Read base UPC {item.base_upc} but not the 5-digit supplement (ambiguous).",
+                reason=PARTIAL_BARCODE_REASON,
             )
 
         candidate = _resolve_local_catalog_candidate(session, barcode=normalized)
@@ -522,8 +557,9 @@ def process_intake_item(session: Session, *, item_id: int) -> str:
 
             if gap_diag is not None:
                 trace.apply_p106_diagnosis(gap_diag, gcd_path=gcd_path)
-                if int(gap_diag.get("gcd_match_count") or 0) == 1 and gap_diag.get("exact_barcode_path"):
+                if p106_gap_is_exact_barcode_authority(gap_diag):
                     p106_exact_barcode_authority = True
+                    sync_intake_display_from_p106_gap(item, gap_diag)
                 try:
                     _apply_p106_diagnosis_to_intake_item(item, gap_diag=gap_diag)
                 except Exception:
@@ -603,13 +639,19 @@ def process_intake_item(session: Session, *, item_id: int) -> str:
                     )
 
             if candidate is None and _p106_reports_no_gcd_match(gap_diag):
-                if _gcd_has_exact_barcode_authority(gcd_path, normalized):
+                if _gcd_has_exact_barcode_authority(gcd_path, normalized) or p106_gap_is_exact_barcode_authority(
+                    gap_diag
+                ):
+                    if gap_diag:
+                        sync_intake_display_from_p106_gap(item, gap_diag)
                     gap_reason = _scanner_gap_finish_reason(gap_diag or {})
                     session.add(item)
                     session.flush()
                     return _finish(session, item, status=ITEM_NEEDS_REVIEW, reason=gap_reason)
                 trace.comicvine_fallback_called = True
                 candidate = _resolve_comicvine_candidate(session, barcode=normalized)
+                if p106_gap_is_exact_barcode_authority(gap_diag):
+                    candidate = None
 
             if candidate is None:
                 gap_reason = _scanner_gap_finish_reason(gap_diag or {})
@@ -658,6 +700,8 @@ def process_intake_item(session: Session, *, item_id: int) -> str:
         item.matched_issue_number = (candidate.get("issue_number") or None)
         item.matched_year = (candidate.get("year") or None)
         item.cover_url = (candidate.get("cover_url") or None)
+        if gap_diag and p106_gap_is_exact_barcode_authority(gap_diag):
+            sync_intake_display_from_p106_gap(item, gap_diag)
         trace.match_source = str(candidate.get("source"))
         learned_probe, upc_probe = probe_local_barcode_hits(session, normalized_barcode=normalized)
         trace.learned_barcode_hit = learned_probe
@@ -670,7 +714,7 @@ def process_intake_item(session: Session, *, item_id: int) -> str:
             session.add(learned_row)
 
         catalog_issue_id = candidate.get("catalog_issue_id")
-        barcode_strong = is_validated_full_upc_exact_match(
+        barcode_strong = p106_exact_barcode_authority or is_validated_full_upc_exact_match(
             normalized,
             publisher=candidate.get("publisher"),
             issue_number=candidate.get("issue_number"),
@@ -680,7 +724,7 @@ def process_intake_item(session: Session, *, item_id: int) -> str:
             local_full_barcode
             and is_local_trusted_match_source(str(candidate.get("source")))
             and catalog_issue_id is not None
-            and barcode_strong
+            and (barcode_strong or p106_exact_barcode_authority)
         )
 
         info_note = ""
@@ -699,11 +743,13 @@ def process_intake_item(session: Session, *, item_id: int) -> str:
                 session,
                 image_path=abs_path,
                 catalog_issue_id=int(catalog_issue_id),
-                barcode_validation_strong=barcode_strong,
+                barcode_validation_strong=barcode_strong or p106_exact_barcode_authority,
                 intake_item_id=int(item.id) if item.id is not None else None,
                 final_issue_id=int(catalog_issue_id),
             )
-            if fp_outcome.blocks_auto_match:
+            trace.fingerprint_top_issue_id = fp_outcome.fingerprint_issue_id
+            trace.fingerprint_top_confidence = fp_outcome.fingerprint_confidence
+            if fp_outcome.blocks_auto_match and not p106_exact_barcode_authority:
                 return _finish(
                     session,
                     item,
@@ -715,21 +761,22 @@ def process_intake_item(session: Session, *, item_id: int) -> str:
                 fingerprint_note_from_outcome(fp_outcome) if barcode_strong else None,
             ) or ""
         elif catalog_issue_id is not None and candidate["source"] == MATCH_SOURCE_CATALOG_UPC:
-            cover_ok, cover_reason = _cover_confirms_barcode_match(
-                session,
-                image_path=abs_path,
-                catalog_issue_id=int(catalog_issue_id),
-                barcode_validation_strong=barcode_strong,
-                intake_item_id=int(item.id) if item.id is not None else None,
-            )
-            if not cover_ok:
-                item.confidence = min(item.confidence, 0.75)
-                return _finish(
+            if not p106_exact_barcode_authority:
+                cover_ok, cover_reason = _cover_confirms_barcode_match(
                     session,
-                    item,
-                    status=ITEM_NEEDS_REVIEW,
-                    reason=f"Barcode match needs cover confirmation: {cover_reason}",
+                    image_path=abs_path,
+                    catalog_issue_id=int(catalog_issue_id),
+                    barcode_validation_strong=barcode_strong,
+                    intake_item_id=int(item.id) if item.id is not None else None,
                 )
+                if not cover_ok:
+                    item.confidence = min(item.confidence, 0.75)
+                    return _finish(
+                        session,
+                        item,
+                        status=ITEM_NEEDS_REVIEW,
+                        reason=f"Barcode match needs cover confirmation: {cover_reason}",
+                    )
 
         if p105_reason and not local_trusted and candidate["source"] == MATCH_SOURCE_CATALOG_UPC:
             return _finish(
