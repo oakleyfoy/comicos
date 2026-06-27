@@ -502,6 +502,7 @@ from app.models.intake_queue import (
     IntakeSession,
     IntakeSessionItem,
 )
+from app.models.p105_barcode_repair import P105MissingBarcodeQueue
 from app.models.marketplace_acquisition import MarketplaceAcquisitionCandidate, MarketplaceSource
 from app.models.release_watchlist import (
     CollectionContinuityAlert,

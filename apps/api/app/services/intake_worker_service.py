@@ -391,6 +391,11 @@ def process_intake_item(session: Session, *, item_id: int) -> str:
 
         candidate = _resolve_candidate(session, barcode=normalized)
         if candidate is None:
+            from app.services.p105_barcode_repair_service import record_missing_barcode_queue
+
+            record_missing_barcode_queue(session, item=item)
+            session.add(item)
+            session.flush()
             return _finish(
                 session,
                 item,

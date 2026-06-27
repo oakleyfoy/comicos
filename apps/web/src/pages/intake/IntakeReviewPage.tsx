@@ -83,8 +83,8 @@ function intakeInfoMessage(item: IntakeItem): Array<{ tone: "success" | "info" |
     }
     return lines;
   }
-  if (item.status === "auto_matched") {
-    lines.push({ tone: "success", text: "High-confidence barcode match." });
+  if (item.status === "auto_matched" && item.match_source === "learned_barcode") {
+    lines.push({ tone: "success", text: "Barcode linked to your catalog for future scans." });
   }
   return lines;
 }

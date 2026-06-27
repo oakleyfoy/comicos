@@ -186,27 +186,50 @@ def test_accept_learns_barcode_mapping(monkeypatch: pytest.MonkeyPatch) -> None:
         session.add(item)
         session.commit()
 
+        monkeypatch.setattr(svc, "_reprocess_intake_item_sync", lambda *a, **k: None)
+
         svc.accept_intake_item(session, item_id=int(item.id), owner_user_id=1)
 
         learned = session.exec(
             select(ComicIssueBarcode).where(ComicIssueBarcode.normalized_barcode == FULL_BARCODE)
         ).one()
         assert learned.catalog_issue_id == issue_id
-        session.refresh(item)
-        assert item.status == ITEM_AUTO_MATCHED
+        upc = session.exec(select(CatalogUpc).where(CatalogUpc.normalized_upc == FULL_BARCODE)).first()
+        assert upc is not None and int(upc.issue_id) == issue_id
 
 
-def test_choose_issue_learns_and_accepts() -> None:
+def test_choose_issue_learns_and_accepts(tmp_path, monkeypatch: pytest.MonkeyPatch) -> None:
+    from PIL import Image
+
+    from app.services.p105_comic_barcode_read_service import ComicBarcodeReadResult
+
     engine = _engine()
     with Session(engine) as session:
         _seed_user(session)
         issue_id = _seed_dc_superman_39(session)
         intake = _intake_session(session)
-        item = _queued_item(session, session_id=int(intake.id), storage_path="x.jpg")
+        item = _queued_item(session, session_id=int(intake.id), storage_path="scan.jpg")
         item.status = ITEM_NEEDS_REVIEW
         item.normalized_barcode = FULL_BARCODE
         session.add(item)
         session.commit()
+
+        img = tmp_path / "scan.jpg"
+        Image.new("RGB", (800, 1200), color=(1, 1, 1)).save(img, format="JPEG")
+        monkeypatch.setattr(worker, "resolve_photo_import_storage_path", lambda *a, **k: img)
+        supp = FULL_BARCODE[12:17]
+        monkeypatch.setattr(
+            worker,
+            "read_comic_barcode_from_image_bytes",
+            lambda *a, **k: ComicBarcodeReadResult(
+                main_upc=FULL_BARCODE[:12],
+                reconstructed_full=FULL_BARCODE,
+                final_supplement=supp,
+                decoded_supplement=supp,
+                supplement_decode_confidence=0.99,
+                confidence_main=0.95,
+            ),
+        )
 
         svc.choose_intake_item_issue(
             session, item_id=int(item.id), owner_user_id=1, catalog_issue_id=issue_id
@@ -276,17 +299,18 @@ def test_import_and_accept_links_local_issue(monkeypatch: pytest.MonkeyPatch) ->
         monkeypatch.setattr(
             cat_ing, "catalog_series_id_for_comicvine_volume", lambda _session, **k: series_id
         )
+        monkeypatch.setattr(svc, "_reprocess_intake_item_sync", lambda *a, **k: None)
 
         svc.import_and_accept_intake_item(session, item_id=int(item.id), owner_user_id=1)
 
         session.refresh(item)
         assert item.selected_catalog_issue_id == issue_id
-        assert item.status == ITEM_AUTO_MATCHED
-        assert item.match_source == "comicvine"
         learned = session.exec(
             select(ComicIssueBarcode).where(ComicIssueBarcode.normalized_barcode == FULL_BARCODE)
         ).one()
         assert learned.catalog_issue_id == issue_id
+        upc = session.exec(select(CatalogUpc).where(CatalogUpc.normalized_upc == FULL_BARCODE)).first()
+        assert upc is not None and int(upc.issue_id) == issue_id
 
 
 def test_enqueue_is_nonblocking_and_increments_count(tmp_path, monkeypatch: pytest.MonkeyPatch) -> None:

@@ -18,7 +18,6 @@ from sqlmodel import Session, func, select
 from app.models import Acquisition, CatalogIssue
 from app.models.acquisition import ACQUISITION_TYPE_OTHER
 from app.models.intake_queue import (
-    ComicIssueBarcode,
     INTAKE_SESSION_ACTIVE,
     INTAKE_SESSION_EXPIRED,
     INTAKE_SESSION_PAUSED,
@@ -34,6 +33,8 @@ from app.models.intake_queue import (
     IntakeItemCandidate,
     IntakeSession,
     IntakeSessionItem,
+    MATCH_SOURCE_CATALOG_UPC,
+    MATCH_SOURCE_LEARNED,
     MATCH_SOURCE_MANUAL,
     utc_now,
 )
@@ -48,8 +49,18 @@ from app.services.acquisition.acquisition_service import (
 from app.services.barcode_scan_consensus_service import validate_single_barcode_read
 from app.services.intake_worker_service import (
     SUSPICIOUS_MIN_IMAGE_BYTES,
+    process_intake_item,
     recognition_image_too_small,
     run_intake_item_async,
+)
+from app.services.p105_barcode_repair_service import (
+    BarcodeAttachConflict,
+    BarcodeAttachError,
+    CATALOG_UPC_SOURCE_LEARNED,
+    CATALOG_UPC_SOURCE_MANUAL,
+    attach_barcode_to_catalog_issue,
+    intake_repair_learned_source,
+    resolve_missing_barcode_queue,
 )
 from app.services.photo_import_storage_service import (
     REPO_ROOT,
@@ -322,37 +333,54 @@ def _load_owned_item(session: Session, *, item_id: int, owner_user_id: int) -> I
     return item
 
 
-def _learn_barcode(
+def _attach_intake_barcode_repair(
     session: Session,
     *,
-    normalized_barcode: str | None,
+    item: IntakeSessionItem,
     catalog_issue_id: int,
     variant_id: int | None,
-    source: str,
     user_id: int,
+    learned_source: str,
+    catalog_upc_source: str = CATALOG_UPC_SOURCE_MANUAL,
 ) -> None:
-    """Upsert the barcode -> issue mapping so future scans match instantly."""
-    if not normalized_barcode:
+    """Learn barcode + optional catalog_upc after user confirms the correct issue."""
+    if not item.normalized_barcode:
         return
-    existing = session.exec(
-        select(ComicIssueBarcode).where(ComicIssueBarcode.normalized_barcode == normalized_barcode)
-    ).first()
-    if existing is not None:
-        existing.catalog_issue_id = catalog_issue_id
-        existing.variant_id = variant_id
-        existing.times_seen += 1
-        existing.updated_at = utc_now()
-        session.add(existing)
-        return
-    session.add(
-        ComicIssueBarcode(
-            normalized_barcode=normalized_barcode,
+    try:
+        attach = attach_barcode_to_catalog_issue(
+            session,
+            barcode=item.normalized_barcode,
             catalog_issue_id=catalog_issue_id,
             variant_id=variant_id,
-            source=source,
-            confirmed_by_user_id=user_id,
+            user_id=user_id,
+            learned_source=learned_source,
+            catalog_upc_source=catalog_upc_source,
+            require_catalog_validation=True,
         )
+    except BarcodeAttachConflict as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+    except BarcodeAttachError as exc:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
+    resolve_missing_barcode_queue(
+        session,
+        barcode=attach.normalized_barcode,
+        catalog_issue_id=catalog_issue_id,
+        intake_item_id=int(item.id) if item.id is not None else None,
+        attach=attach,
     )
+
+
+def _reprocess_intake_item_sync(session: Session, *, item_id: int) -> None:
+    """Re-run identification so catalog_upc/learned matches apply immediately."""
+    item = session.get(IntakeSessionItem, item_id)
+    if item is None:
+        return
+    item.status = ITEM_QUEUED
+    item.reason = None
+    item.error = None
+    session.add(item)
+    session.flush()
+    process_intake_item(session, item_id=item_id)
 
 
 def accept_intake_item(session: Session, *, item_id: int, owner_user_id: int) -> IntakeSessionItem:
@@ -363,18 +391,16 @@ def accept_intake_item(session: Session, *, item_id: int, owner_user_id: int) ->
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="No catalog match selected; choose an issue first.",
         )
-    _learn_barcode(
+    _attach_intake_barcode_repair(
         session,
-        normalized_barcode=item.normalized_barcode,
+        item=item,
         catalog_issue_id=int(item.selected_catalog_issue_id),
         variant_id=item.selected_variant_id,
-        source=item.match_source or MATCH_SOURCE_MANUAL,
         user_id=owner_user_id,
+        learned_source=intake_repair_learned_source(item.match_source),
     )
-    item.status = ITEM_AUTO_MATCHED
-    item.confidence = max(item.confidence, 0.99)
-    session.add(item)
     session.commit()
+    _reprocess_intake_item_sync(session, item_id=int(item.id or 0))
     session.refresh(item)
     return item
 
@@ -399,19 +425,18 @@ def choose_intake_item_issue(
     item.matched_issue_number = identity.issue_number
     item.cover_url = identity.cover_image_url
     item.match_source = MATCH_SOURCE_MANUAL
-    # Manual pick is a confirmation: learn the barcode and mark accepted so it can be added.
-    _learn_barcode(
+    session.add(item)
+    session.flush()
+    _attach_intake_barcode_repair(
         session,
-        normalized_barcode=item.normalized_barcode,
+        item=item,
         catalog_issue_id=catalog_issue_id,
         variant_id=variant_id,
-        source=MATCH_SOURCE_MANUAL,
         user_id=owner_user_id,
+        learned_source=MATCH_SOURCE_MANUAL,
     )
-    item.status = ITEM_AUTO_MATCHED
-    item.confidence = max(item.confidence, 0.99)
-    session.add(item)
     session.commit()
+    _reprocess_intake_item_sync(session, item_id=int(item.id or 0))
     session.refresh(item)
     return item
 
@@ -601,18 +626,19 @@ def import_and_accept_intake_item(
         item.matched_issue_number = identity.issue_number
         item.cover_url = identity.cover_image_url or item.cover_url
     item.match_source = "comicvine"
-    _learn_barcode(
+    session.add(item)
+    session.flush()
+    _attach_intake_barcode_repair(
         session,
-        normalized_barcode=item.normalized_barcode,
+        item=item,
         catalog_issue_id=issue_id,
         variant_id=variant_id,
-        source="comicvine",
         user_id=owner_user_id,
+        learned_source=MATCH_SOURCE_LEARNED,
+        catalog_upc_source=CATALOG_UPC_SOURCE_LEARNED,
     )
-    item.status = ITEM_AUTO_MATCHED
-    item.confidence = max(item.confidence, 0.95)
-    session.add(item)
     session.commit()
+    _reprocess_intake_item_sync(session, item_id=int(item.id or 0))
     session.refresh(item)
     logger.info(
         "intake.import.accepted item_id=%s volume_id=%s catalog_issue_id=%s", item.id, volume_id, issue_id
@@ -700,13 +726,13 @@ def add_intake_item_to_inventory(
     recompute_actual_book_count(session, acquisition)
     session.add(acquisition)
 
-    _learn_barcode(
+    _attach_intake_barcode_repair(
         session,
-        normalized_barcode=item.normalized_barcode,
+        item=item,
         catalog_issue_id=int(item.selected_catalog_issue_id),
         variant_id=item.selected_variant_id,
-        source=item.match_source or MATCH_SOURCE_MANUAL,
         user_id=owner_user_id,
+        learned_source=intake_repair_learned_source(item.match_source),
     )
 
     item.status = ITEM_ADDED_TO_INVENTORY
