@@ -18,6 +18,7 @@ from app.models.asset_ledger import User
 from app.models.catalog_master import CatalogIssue, CatalogPublisher, CatalogSeries, CatalogUpc
 from app.models.intake_queue import (
     ComicIssueBarcode,
+    ITEM_ADDED_TO_INVENTORY,
     ITEM_AUTO_MATCHED,
     ITEM_FAILED,
     ITEM_NEEDS_REVIEW,
@@ -586,3 +587,67 @@ def test_add_all_high_confidence_after_partial_attach_failure() -> None:
         assert result["added"] == 2
         copies = session.exec(select(InventoryCopy)).all()
         assert len(copies) == 2
+
+
+def test_add_intake_item_to_inventory_catalog_upc_and_bad_variant() -> None:
+    """Single add must not 500 on stale variant ids; catalog_upc attach stays trusted."""
+    from app.models import Acquisition, InventoryCopy
+    from app.models.acquisition import ACQUISITION_TYPE_OTHER
+
+    BLACKS = "85647000817200911"
+    engine = _engine()
+    with Session(engine) as session:
+        _seed_user(session)
+        pub = CatalogPublisher(name="AHOY Comics", normalized_name="ahoy comics")
+        session.add(pub)
+        session.commit()
+        series = CatalogSeries(name="Black's Myth", normalized_name="blacks myth", publisher_id=int(pub.id))
+        session.add(series)
+        session.commit()
+        issue = CatalogIssue(
+            series_id=int(series.id),
+            publisher_id=int(pub.id),
+            issue_number="4",
+            normalized_issue_number="4",
+            cover_date=date(2023, 1, 1),
+        )
+        session.add(issue)
+        session.commit()
+        session.add(
+            CatalogUpc(upc=BLACKS, normalized_upc=BLACKS, issue_id=int(issue.id), source="test")
+        )
+        session.commit()
+        acq = Acquisition(user_id=1, acquisition_type=ACQUISITION_TYPE_OTHER)
+        session.add(acq)
+        session.commit()
+        intake = IntakeSession(
+            user_id=1,
+            session_token="single-add-tok",
+            status="active",
+            acquisition_id=int(acq.id),
+            expires_at=datetime(2099, 1, 1, tzinfo=timezone.utc),
+        )
+        session.add(intake)
+        session.commit()
+        item = IntakeSessionItem(
+            session_id=int(intake.id),
+            user_id=1,
+            storage_path="scan.jpg",
+            status=ITEM_AUTO_MATCHED,
+            normalized_barcode=BLACKS,
+            selected_catalog_issue_id=int(issue.id),
+            selected_variant_id=999999,
+            match_source=MATCH_SOURCE_CATALOG_UPC,
+        )
+        session.add(item)
+        session.commit()
+        session.refresh(item)
+
+        updated = svc.add_intake_item_to_inventory(
+            session, item_id=int(item.id or 0), owner_user_id=1
+        )
+        assert updated.status == ITEM_ADDED_TO_INVENTORY
+        assert updated.inventory_copy_id
+        copy = session.get(InventoryCopy, int(updated.inventory_copy_id))
+        assert copy is not None
+        assert copy.catalog_variant_id is None

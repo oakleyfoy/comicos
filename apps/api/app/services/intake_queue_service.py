@@ -16,7 +16,7 @@ from fastapi import HTTPException, UploadFile, status
 from sqlmodel import Session, func, select
 
 from app.models import Acquisition, CatalogIssue
-from app.models.catalog_master import CatalogUpc
+from app.models.catalog_master import CatalogUpc, CatalogVariant
 from app.models.acquisition import ACQUISITION_TYPE_OTHER
 from app.models.intake_queue import (
     INTAKE_SESSION_ACTIVE,
@@ -61,6 +61,7 @@ from app.services.p105_barcode_repair_service import (
     CATALOG_UPC_SOURCE_MANUAL,
     attach_barcode_to_catalog_issue,
     intake_repair_learned_source,
+    require_full_direct_market_barcode,
     resolve_missing_barcode_queue,
 )
 from app.services.intake_barcode_confidence import (
@@ -400,6 +401,27 @@ def _intake_barcode_attach_trusted(session: Session, *, item: IntakeSessionItem)
     return upc is not None and int(upc.issue_id or 0) == int(item.selected_catalog_issue_id)
 
 
+def _resolve_intake_catalog_variant_id(
+    session: Session, *, catalog_issue_id: int, variant_id: int | None
+) -> int | None:
+    if variant_id is None:
+        return None
+    variant = session.get(CatalogVariant, int(variant_id))
+    if variant is None or int(variant.issue_id) != int(catalog_issue_id):
+        return None
+    return int(variant_id)
+
+
+def _intake_can_learn_barcode(item: IntakeSessionItem) -> bool:
+    if not (item.normalized_barcode or "").strip():
+        return False
+    try:
+        require_full_direct_market_barcode(item.normalized_barcode or "")
+    except BarcodeAttachError:
+        return False
+    return True
+
+
 def _attach_intake_barcode_repair(
     session: Session,
     *,
@@ -429,13 +451,20 @@ def _attach_intake_barcode_repair(
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
     except BarcodeAttachError as exc:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
-    resolve_missing_barcode_queue(
-        session,
-        barcode=attach.normalized_barcode,
-        catalog_issue_id=catalog_issue_id,
-        intake_item_id=int(item.id) if item.id is not None else None,
-        attach=attach,
-    )
+    try:
+        resolve_missing_barcode_queue(
+            session,
+            barcode=attach.normalized_barcode,
+            catalog_issue_id=catalog_issue_id,
+            intake_item_id=int(item.id) if item.id is not None else None,
+            attach=attach,
+        )
+    except Exception:
+        logger.warning(
+            "intake.barcode_attach.resolve_missing_barcode_queue_failed item_id=%s",
+            item.id,
+            exc_info=True,
+        )
 
 
 def _reprocess_intake_item_sync(session: Session, *, item_id: int) -> None:
@@ -862,14 +891,36 @@ def add_intake_item_to_inventory(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Catalog issue not found")
 
     intake = session.get(IntakeSession, int(item.session_id))
+    if intake is None:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Intake session missing for this item.",
+        )
     acquisition = _ensure_session_acquisition(session, intake)
     require_open(acquisition)
+
+    catalog_issue_id = int(item.selected_catalog_issue_id)
+    variant_id = _resolve_intake_catalog_variant_id(
+        session, catalog_issue_id=catalog_issue_id, variant_id=item.selected_variant_id
+    )
+
+    if _intake_can_learn_barcode(item):
+        trusted_catalog_upc = _intake_barcode_attach_trusted(session, item=item)
+        _attach_intake_barcode_repair(
+            session,
+            item=item,
+            catalog_issue_id=catalog_issue_id,
+            variant_id=variant_id,
+            user_id=owner_user_id,
+            learned_source=intake_repair_learned_source(item.match_source),
+            require_catalog_validation=not trusted_catalog_upc,
+        )
 
     copy = create_received_catalog_copy(
         session,
         acquisition=acquisition,
-        catalog_issue_id=int(item.selected_catalog_issue_id),
-        catalog_variant_id=item.selected_variant_id,
+        catalog_issue_id=catalog_issue_id,
+        catalog_variant_id=variant_id,
         series_id=int(issue.series_id) if issue.series_id is not None else None,
         issue_number=str(issue.issue_number or ""),
         received_via="INTAKE_SCAN",
@@ -878,17 +929,6 @@ def add_intake_item_to_inventory(
     session.flush()
     recompute_actual_book_count(session, acquisition)
     session.add(acquisition)
-
-    trusted_catalog_upc = _intake_barcode_attach_trusted(session, item=item)
-    _attach_intake_barcode_repair(
-        session,
-        item=item,
-        catalog_issue_id=int(item.selected_catalog_issue_id),
-        variant_id=item.selected_variant_id,
-        user_id=owner_user_id,
-        learned_source=intake_repair_learned_source(item.match_source),
-        require_catalog_validation=not trusted_catalog_upc,
-    )
 
     item.status = ITEM_ADDED_TO_INVENTORY
     item.acquisition_id = int(acquisition.id or 0)
