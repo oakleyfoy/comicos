@@ -91,7 +91,7 @@ def upgrade() -> None:
         )
         op.create_index(f"ix_{table}_collection_id", table, ["collection_id"])
 
-    users = conn.execute(sa.text("SELECT id FROM user")).fetchall()
+    users = conn.execute(sa.text('SELECT id FROM "user"')).fetchall()
     now = datetime.now(timezone.utc).isoformat()
     for (user_id,) in users:
         result = conn.execute(
@@ -119,7 +119,7 @@ def upgrade() -> None:
                 {"cid": collection_id, "uid": user_id},
             )
         conn.execute(
-            sa.text("UPDATE user SET active_collection_id = :cid WHERE id = :uid"),
+            sa.text('UPDATE "user" SET active_collection_id = :cid WHERE id = :uid'),
             {"cid": collection_id, "uid": user_id},
         )
 
