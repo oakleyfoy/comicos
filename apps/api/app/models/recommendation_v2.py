@@ -25,6 +25,12 @@ class RecommendationRunV2(SQLModel, table=True):
 
     id: int | None = Field(default=None, primary_key=True)
     owner_user_id: int = Field(foreign_key="user.id", nullable=False, index=True)
+    collection_id: int | None = Field(
+        default=None,
+        foreign_key="user_data_collection.id",
+        nullable=True,
+        index=True,
+    )
     run_uuid: str = Field(default_factory=generate_uuid, max_length=64, nullable=False, index=True)
     status: str = Field(default="RUNNING", max_length=24, nullable=False, index=True)
     issues_scored: int = Field(default=0, nullable=False)
@@ -43,6 +49,12 @@ class RecommendationScoreV2(SQLModel, table=True):
 
     id: int | None = Field(default=None, primary_key=True)
     owner_user_id: int = Field(foreign_key="user.id", nullable=False, index=True)
+    collection_id: int | None = Field(
+        default=None,
+        foreign_key="user_data_collection.id",
+        nullable=True,
+        index=True,
+    )
     recommendation_run_id: int = Field(foreign_key="recommendation_run_v2.id", nullable=False, index=True)
     release_issue_id: int = Field(foreign_key="release_issue.id", nullable=False, index=True)
     release_variant_id: int | None = Field(default=None, foreign_key="release_variant.id", nullable=True, index=True)

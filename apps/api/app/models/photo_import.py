@@ -53,6 +53,12 @@ class PhotoImportSession(SQLModel, table=True):
 
     id: int | None = Field(default=None, primary_key=True)
     user_id: int = Field(foreign_key="user.id", index=True, nullable=False)
+    collection_id: int | None = Field(
+        default=None,
+        foreign_key="user_data_collection.id",
+        nullable=True,
+        index=True,
+    )
     session_token: str = Field(max_length=64, unique=True, index=True, nullable=False)
     status: str = Field(max_length=32, default=SESSION_STATUS_CREATED, nullable=False)
     created_at: datetime = Field(default_factory=utc_now, nullable=False)

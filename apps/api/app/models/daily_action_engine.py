@@ -38,6 +38,12 @@ class DailyCollectorAction(SQLModel, table=True):
 
     id: int | None = Field(default=None, primary_key=True)
     owner_user_id: int = Field(foreign_key="user.id", nullable=False, index=True)
+    collection_id: int | None = Field(
+        default=None,
+        foreign_key="user_data_collection.id",
+        nullable=True,
+        index=True,
+    )
     action_type: str = Field(max_length=16, nullable=False, index=True)
     priority_score: float = Field(nullable=False)
     confidence_score: float = Field(nullable=False)

@@ -27,6 +27,7 @@ from app.services.acquisition.acquisition_service import (
     get_acquisition_or_404,
     require_open,
 )
+from app.services.collection_context import require_active_collection_id_for_user
 
 logger = logging.getLogger(__name__)
 
@@ -97,6 +98,7 @@ def create_photo_import_session(
     now = utc_now()
     row = PhotoImportSession(
         user_id=owner_user_id,
+        collection_id=require_active_collection_id_for_user(session, owner_user_id),
         session_token=token,
         status=SESSION_STATUS_CREATED,
         acquisition_id=int(acq.id or 0),

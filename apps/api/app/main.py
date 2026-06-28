@@ -1136,6 +1136,7 @@ from app.api.receiving import attach_receiving_layer
 from app.api.acquisitions import attach_acquisition_layer
 from app.api.photo_import import attach_photo_import_layer
 from app.api.intake_queue import attach_intake_queue_layer
+from app.api.p108_collections_api import attach_p108_collections_layer
 from app.api.gpt_comic_read import attach_gpt_comic_read_layer
 from app.api.catalog_universe import attach_catalog_universe_layer
 from app.api.catalog_import_dashboard import attach_catalog_import_dashboard_layer
@@ -1396,6 +1397,7 @@ attach_receiving_layer(app)
 attach_acquisition_layer(app)
 attach_photo_import_layer(app)
 attach_intake_queue_layer(app)
+attach_p108_collections_layer(app)
 attach_gpt_comic_read_layer(app)
 attach_catalog_universe_layer(app)
 attach_catalog_import_dashboard_layer(app)

@@ -48,6 +48,7 @@ from app.services.acquisition.acquisition_service import (
     require_open,
 )
 from app.services.barcode_scan_consensus_service import validate_single_barcode_read
+from app.services.collection_context import require_active_collection_id_for_user
 from app.services.intake_worker_service import (
     SUSPICIOUS_MIN_IMAGE_BYTES,
     process_intake_item,
@@ -107,6 +108,7 @@ def create_intake_session(
     now = utc_now()
     row = IntakeSession(
         user_id=owner_user_id,
+        collection_id=require_active_collection_id_for_user(session, owner_user_id),
         session_token=secrets.token_urlsafe(32),
         name=name,
         status=INTAKE_SESSION_ACTIVE,

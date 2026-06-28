@@ -43,6 +43,12 @@ class RetailerSyncRun(SQLModel, table=True):
 
     id: int | None = Field(default=None, primary_key=True)
     owner_user_id: int = Field(foreign_key="user.id", nullable=False, index=True)
+    collection_id: int | None = Field(
+        default=None,
+        foreign_key="user_data_collection.id",
+        nullable=True,
+        index=True,
+    )
     retailer_account_id: int = Field(foreign_key="retailer_account.id", nullable=False, index=True)
     retailer: str = Field(max_length=32, nullable=False, index=True)
     status: str = Field(default="pending", max_length=32, nullable=False, index=True)
@@ -75,6 +81,12 @@ class RetailerOrderSnapshot(SQLModel, table=True):
 
     id: int | None = Field(default=None, primary_key=True)
     owner_user_id: int = Field(foreign_key="user.id", nullable=False, index=True)
+    collection_id: int | None = Field(
+        default=None,
+        foreign_key="user_data_collection.id",
+        nullable=True,
+        index=True,
+    )
     retailer_account_id: int = Field(foreign_key="retailer_account.id", nullable=False, index=True)
     retailer: str = Field(max_length=32, nullable=False, index=True)
     retailer_order_number: str = Field(max_length=128, nullable=False, index=True)

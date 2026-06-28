@@ -165,6 +165,12 @@ class Order(SQLModel, table=True):
 
     id: int | None = Field(default=None, primary_key=True)
     user_id: int | None = Field(default=None, foreign_key="user.id", index=True)
+    collection_id: int | None = Field(
+        default=None,
+        foreign_key="user_data_collection.id",
+        nullable=True,
+        index=True,
+    )
     retailer: str = Field(max_length=255, nullable=False)
     order_date: date = Field(nullable=False)
     source_type: str | None = Field(default=None, max_length=100)
@@ -224,6 +230,12 @@ class InventoryCopy(SQLModel, table=True):
 
     id: int | None = Field(default=None, primary_key=True)
     user_id: int | None = Field(default=None, foreign_key="user.id", index=True)
+    collection_id: int | None = Field(
+        default=None,
+        foreign_key="user_data_collection.id",
+        nullable=True,
+        index=True,
+    )
     order_item_id: int | None = Field(default=None, nullable=True, index=True)
     variant_id: int | None = Field(default=None, nullable=True, index=True)
     copy_number: int = Field(nullable=False)
@@ -1268,6 +1280,12 @@ class User(SQLModel, table=True):
     email: str = Field(index=True, unique=True, max_length=320)
     password_hash: str = Field(max_length=255, nullable=False)
     is_active: bool = Field(default=True, nullable=False)
+    active_collection_id: int | None = Field(
+        default=None,
+        foreign_key="user_data_collection.id",
+        nullable=True,
+        index=True,
+    )
     created_at: datetime = Field(
         default_factory=utc_now,
         sa_column=Column(DateTime(timezone=True), nullable=False),

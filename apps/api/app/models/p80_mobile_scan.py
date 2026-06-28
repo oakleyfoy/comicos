@@ -25,6 +25,12 @@ class P80MobileScan(SQLModel, table=True):
 
     id: int | None = Field(default=None, primary_key=True)
     owner_user_id: int = Field(foreign_key="user.id", nullable=False, index=True)
+    collection_id: int | None = Field(
+        default=None,
+        foreign_key="user_data_collection.id",
+        nullable=True,
+        index=True,
+    )
     scan_source: str = Field(max_length=24, nullable=False, index=True)
     raw_input: str = Field(default="", sa_column=Column(Text, nullable=False))
     normalized_barcode: str = Field(default="", max_length=128, nullable=False, index=True)

@@ -45,6 +45,12 @@ class IntakeSession(SQLModel, table=True):
 
     id: int | None = Field(default=None, primary_key=True)
     user_id: int = Field(foreign_key="user.id", index=True, nullable=False)
+    collection_id: int | None = Field(
+        default=None,
+        foreign_key="user_data_collection.id",
+        nullable=True,
+        index=True,
+    )
     session_token: str = Field(max_length=64, unique=True, index=True, nullable=False)
     name: str | None = Field(default=None, max_length=256, nullable=True)
     status: str = Field(max_length=32, default=INTAKE_SESSION_ACTIVE, nullable=False)

@@ -17,6 +17,12 @@ class InventoryScanSession(SQLModel, table=True):
 
     id: int | None = Field(default=None, primary_key=True)
     user_id: int | None = Field(default=None, foreign_key="user.id", nullable=True, index=True)
+    collection_id: int | None = Field(
+        default=None,
+        foreign_key="user_data_collection.id",
+        nullable=True,
+        index=True,
+    )
     name: str = Field(max_length=255, nullable=False)
     mode: str = Field(max_length=32, nullable=False, index=True)
     source_type: str | None = Field(default=None, max_length=40, nullable=True, index=True)

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, typ
 import { Link, useLocation, useNavigate } from "react-router-dom";
 
 import { useAuth } from "../auth/AuthContext";
+import { CollectionSwitcherBar } from "./CollectionSwitcherBar";
 import { ComicOsMark } from "./ComicOsMark";
 import {
   DEFAULT_EXPANDED_GROUP_IDS,
@@ -80,7 +81,7 @@ function NavLinkRow({ link, pathname }: { link: NavLinkItem; pathname: string })
 }
 
 export function AppShell({ children }: { children: ReactNode }) {
-  const { isOpsAdmin, logout } = useAuth();
+  const { isOpsAdmin, logout, isAuthenticated } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
   const [expandedGroupIds, setExpandedGroupIds] = useState<Set<string>>(() => loadExpandedGroupIds());
@@ -274,7 +275,10 @@ export function AppShell({ children }: { children: ReactNode }) {
           </nav>
         </aside>
 
-        <main className="min-w-0 flex-1 pb-8">{children}</main>
+        <main className="min-w-0 flex-1 pb-8">
+          {isAuthenticated ? <CollectionSwitcherBar /> : null}
+          {children}
+        </main>
       </div>
     </div>
   );

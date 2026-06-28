@@ -12,6 +12,7 @@ from app.models import (
     RetailerOrderSnapshot,
     RetailerSyncRun,
 )
+from app.services.collection_context import require_active_collection_id_for_user
 from app.services.retailer_sync.midtown_parser import (
     MidtownOrderDetail,
     MidtownOrderNumberError,
@@ -131,6 +132,7 @@ def upsert_retailer_order_snapshots(
         if snapshot is None:
             snapshot = RetailerOrderSnapshot(
                 owner_user_id=account.owner_user_id,
+                collection_id=require_active_collection_id_for_user(session, int(account.owner_user_id)),
                 retailer_account_id=account.id,
                 retailer=account.retailer,
                 retailer_order_number=order_number,

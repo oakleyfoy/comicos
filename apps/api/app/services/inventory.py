@@ -17,6 +17,7 @@ from app.models import (
     OrganizationMember,
     User,
 )
+from app.services.collection_context import require_active_collection_id
 from app.services.inventory_canonical_spine import (
     apply_inventory_spine_joins,
     issue_number_expr,
@@ -230,7 +231,12 @@ def _inventory_detail_response_from_merged(merged: dict) -> InventoryDetailRespo
         return InventoryDetailResponse.model_validate(merged)
 
 
-def build_inventory_base_query(current_user: User, *, owner_user_ids: tuple[int, ...] | None = None):
+def build_inventory_base_query(
+    current_user: User,
+    *,
+    owner_user_ids: tuple[int, ...] | None = None,
+    collection_id: int | None = None,
+):
     gain_loss_expr = gain_loss_expression().label("gain_loss")
     asset_state_expr = _asset_state_case_expression().label("asset_state")
     scope_ids = owner_user_ids if owner_user_ids is not None else (int(current_user.id),)
@@ -275,7 +281,10 @@ def build_inventory_base_query(current_user: User, *, owner_user_ids: tuple[int,
         asset_state_expr,
         case((InventoryCopy.order_status == "received", True), else_=False).label("is_in_hand"),
     )
-    return _apply_inventory_spine_joins(stmt).where(InventoryCopy.user_id.in_(scope_ids))
+    stmt = _apply_inventory_spine_joins(stmt).where(InventoryCopy.user_id.in_(scope_ids))
+    if collection_id is not None:
+        stmt = stmt.where(InventoryCopy.collection_id == collection_id)
+    return stmt
 
 
 def build_inventory_detail_query(current_user: User):
@@ -629,10 +638,15 @@ def _list_inventory_paginated_card(
     org_scope_ids: tuple[int, ...] | None,
     org_assignment_metadata: dict,
     org_review_metadata: dict,
+    collection_id: int | None = None,
 ) -> InventoryListResponse:
     user_id = int(current_user.id)
     filtered_stmt = apply_inventory_filters(
-        build_inventory_base_query(current_user, owner_user_ids=org_scope_ids),
+        build_inventory_base_query(
+            current_user,
+            owner_user_ids=org_scope_ids,
+            collection_id=collection_id,
+        ),
         search=search,
         publisher=publisher,
         hold_status=hold_status,
@@ -644,6 +658,8 @@ def _list_inventory_paginated_card(
     total_stmt = _apply_inventory_spine_joins(
         select(func.count()).select_from(InventoryCopy)
     ).where(InventoryCopy.user_id.in_(org_scope_ids if org_scope_ids is not None else (user_id,)))
+    if collection_id is not None:
+        total_stmt = total_stmt.where(InventoryCopy.collection_id == collection_id)
     total_stmt = apply_inventory_filters(
         total_stmt,
         search=search,
@@ -695,6 +711,7 @@ def _list_inventory_paginated_fast(
     org_scope_ids: tuple[int, ...] | None,
     org_assignment_metadata: dict,
     org_review_metadata: dict,
+    collection_id: int | None = None,
 ) -> InventoryListResponse:
     user_id = int(current_user.id)
     _, dup_attachments = duplicate_ownership_inventory_context_for_owner(
@@ -706,7 +723,11 @@ def _list_inventory_paginated_fast(
     arrival_by_inventory = batch_order_arrival_classifications(session, user_id=user_id)
 
     filtered_stmt = apply_inventory_filters(
-        build_inventory_base_query(current_user, owner_user_ids=org_scope_ids),
+        build_inventory_base_query(
+            current_user,
+            owner_user_ids=org_scope_ids,
+            collection_id=collection_id,
+        ),
         search=search,
         publisher=publisher,
         hold_status=hold_status,
@@ -718,6 +739,8 @@ def _list_inventory_paginated_fast(
     total_stmt = _apply_inventory_spine_joins(
         select(func.count()).select_from(InventoryCopy)
     ).where(InventoryCopy.user_id.in_(org_scope_ids if org_scope_ids is not None else (user_id,)))
+    if collection_id is not None:
+        total_stmt = total_stmt.where(InventoryCopy.collection_id == collection_id)
     total_stmt = apply_inventory_filters(
         total_stmt,
         search=search,
@@ -955,6 +978,7 @@ def list_inventory(
     organization_id: int | None = None,
     list_enrichment: Literal["card", "full"] = "full",
 ) -> InventoryListResponse:
+    active_collection_id = require_active_collection_id(session, current_user)
     org_scope_ids: tuple[int, ...] | None = None
     org_assignment_metadata: dict[int, dict[str, object]] = {}
     org_review_metadata: dict[int, dict[str, object]] = {}
@@ -1021,6 +1045,7 @@ def list_inventory(
             org_scope_ids=org_scope_ids,
             org_assignment_metadata=org_assignment_metadata,
             org_review_metadata=org_review_metadata,
+            collection_id=active_collection_id,
         )
 
     if not needs_full_enrichment_scan:
@@ -1042,6 +1067,7 @@ def list_inventory(
             org_scope_ids=org_scope_ids,
             org_assignment_metadata=org_assignment_metadata,
             org_review_metadata=org_review_metadata,
+            collection_id=active_collection_id,
         )
 
     _, _, _, intel_signals = compute_inventory_intelligence(
@@ -1141,7 +1167,11 @@ def list_inventory(
             return InventoryListResponse(page=page, page_size=page_size, total=0, items=[])
 
     filtered_stmt = apply_inventory_filters(
-        build_inventory_base_query(current_user, owner_user_ids=org_scope_ids),
+        build_inventory_base_query(
+            current_user,
+            owner_user_ids=org_scope_ids,
+            collection_id=active_collection_id,
+        ),
         search=search,
         publisher=publisher,
         hold_status=hold_status,
@@ -1153,6 +1183,7 @@ def list_inventory(
     total_stmt = _apply_inventory_spine_joins(
         select(func.count()).select_from(InventoryCopy)
     ).where(InventoryCopy.user_id.in_(org_scope_ids if org_scope_ids is not None else (int(current_user.id),)))
+    total_stmt = total_stmt.where(InventoryCopy.collection_id == active_collection_id)
     total_stmt = apply_inventory_filters(
         total_stmt,
         search=search,
@@ -1753,7 +1784,10 @@ def inventory_row_for_copy(
     current_user: User,
     inventory_copy_id: int,
 ) -> InventoryRow:
-    row_stmt = build_inventory_base_query(current_user).where(InventoryCopy.id == inventory_copy_id)
+    row_stmt = build_inventory_base_query(
+        current_user,
+        collection_id=require_active_collection_id(session, current_user),
+    ).where(InventoryCopy.id == inventory_copy_id)
     row = session.exec(row_stmt).one()
     row_map = dict(row._mapping)
     _, _, _, sigs = compute_inventory_intelligence(

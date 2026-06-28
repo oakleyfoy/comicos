@@ -24,6 +24,12 @@ class PullList(SQLModel, table=True):
 
     id: int | None = Field(default=None, primary_key=True)
     owner_user_id: int = Field(foreign_key="user.id", nullable=False, index=True)
+    collection_id: int | None = Field(
+        default=None,
+        foreign_key="user_data_collection.id",
+        nullable=True,
+        index=True,
+    )
     publisher: str = Field(max_length=120, nullable=False, index=True)
     series_name: str = Field(max_length=200, nullable=False, index=True)
     canonical_series_id: int | None = Field(default=None, nullable=True, index=True)

@@ -24,6 +24,7 @@ from app.schemas.orders import (
     OrderListResponse,
     OrderListRow,
 )
+from app.services.collection_context import require_active_collection_id
 from app.services.canonical_creators import get_or_create_canonical_creator
 from app.services.canonical_series import (
     get_or_create_canonical_series,
@@ -243,7 +244,7 @@ def sync_canonical_creators_for_order_item(
         )
 
 
-def build_orders_base_query(current_user: User):
+def build_orders_base_query(session: Session, current_user: User):
     return (
         select(
             Order.id.label("order_id"),
@@ -263,6 +264,7 @@ def build_orders_base_query(current_user: User):
         .join(ComicTitle, ComicIssue.comic_title_id == ComicTitle.id, isouter=True)
         .join(Publisher, ComicTitle.publisher_id == Publisher.id, isouter=True)
         .where(Order.user_id == current_user.id)
+        .where(Order.collection_id == require_active_collection_id(session, current_user))
         .group_by(
             Order.id,
             Order.retailer,
@@ -331,7 +333,7 @@ def list_orders_for_user(
     if not legacy_customer_order_table_exists(session):
         return OrderListResponse(page=page, page_size=page_size, total=0, items=[])
     filtered_stmt = apply_orders_filters(
-        build_orders_base_query(current_user),
+        build_orders_base_query(session, current_user),
         retailer=retailer,
         search=search,
     )
@@ -361,6 +363,7 @@ def get_order_detail_for_user(
         select(Order).where(
             Order.id == order_id,
             Order.user_id == current_user.id,
+            Order.collection_id == require_active_collection_id(session, current_user),
         )
     ).first()
     if order is None:
@@ -492,6 +495,7 @@ def create_order_for_user_in_transaction(
 
     order = Order(
         user_id=current_user.id,
+        collection_id=require_active_collection_id(session, current_user),
         retailer=payload.retailer,
         order_date=payload.order_date,
         source_type=payload.source_type,
@@ -567,6 +571,7 @@ def create_order_for_user_in_transaction(
         for copy_number in range(1, item.quantity + 1):
             inventory_copy = InventoryCopy(
                 user_id=current_user.id,
+                collection_id=require_active_collection_id(session, current_user),
                 order_item_id=order_item.id,
                 variant_id=variant.id,
                 copy_number=copy_number,
