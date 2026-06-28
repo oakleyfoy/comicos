@@ -100,7 +100,7 @@ def upgrade() -> None:
                 INSERT INTO user_data_collection
                     (owner_user_id, name, collection_type, is_default, created_at, updated_at)
                 VALUES
-                    (:uid, 'Oakley Real Collection', 'real', 1, :now, :now)
+                    (:uid, 'Oakley Real Collection', 'real', TRUE, :now, :now)
                 """
             ),
             {"uid": user_id, "now": now},
