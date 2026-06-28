@@ -16,6 +16,7 @@ Every candidate is run through safe-match validation so we never auto-match the 
 
 from __future__ import annotations
 
+import json
 import logging
 import re
 import threading
@@ -806,7 +807,21 @@ def process_intake_item(session: Session, *, item_id: int) -> str:
                 and not p106_gap_is_exact_barcode_authority(gap_diag or {})
             ):
                 from app.services.p106_1_gcd_non_barcode_recovery_service import (
+                    build_p106_1_intake_hint_snapshot,
                     enrich_gap_diagnosis_with_gcd_non_barcode_recovery,
+                )
+
+                recovery_hints, hint_snapshot = build_p106_1_intake_hint_snapshot(
+                    session,
+                    item=item,
+                    barcode=normalized,
+                    image_path=abs_path,
+                    image_bytes=image_bytes,
+                    p105=p105,
+                )
+                logger.info(
+                    "p106_1.intake_hints_before_enrich %s",
+                    json.dumps(hint_snapshot, default=str),
                 )
 
                 gap_diag = enrich_gap_diagnosis_with_gcd_non_barcode_recovery(
@@ -819,6 +834,7 @@ def process_intake_item(session: Session, *, item_id: int) -> str:
                     image_bytes=image_bytes,
                     prior_diagnosis=gap_diag or {},
                     p105=p105,
+                    recovery_hints=recovery_hints,
                 )
                 if gap_diag.get("recovery_stage") == "p106_1_non_barcode":
                     trace.p106_called = True

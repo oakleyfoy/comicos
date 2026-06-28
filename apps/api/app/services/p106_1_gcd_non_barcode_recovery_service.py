@@ -106,6 +106,8 @@ class IntakeGcdRecoveryHints:
     ocr_publisher: str | None
     facsimile_or_reprint: bool = False
     series_norm_aliases: list[str] = field(default_factory=list)
+    ocr_confidence: float = 0.0
+    raw_ocr_text_excerpt: str | None = None
 
 
 def _gcd_barcode_column_empty(raw: Any) -> bool:
@@ -147,7 +149,7 @@ def gather_intake_gcd_recovery_hints(
     image_bytes: bytes | None,
     p105: Any,
 ) -> IntakeGcdRecoveryHints:
-    del session, image_path, p105  # reserved for future intake hooks
+    del session  # fingerprint uses session in separate helpers at call site
 
     publisher = (item.matched_publisher or "").strip() or None
     if not publisher:
@@ -167,16 +169,24 @@ def gather_intake_gcd_recovery_hints(
     ocr_publisher: str | None = None
     facsimile = False
     ocr_confidence = 0.0
+    raw_ocr_excerpt: str | None = None
 
     if image_bytes:
         ocr = extract_ocr_signal(image_bytes, source_name=f"intake-{getattr(item, 'id', 0)}")
         ocr_confidence = float(ocr.confidence or 0.0)
-        if ocr_confidence >= 0.35:
-            ocr_title = (ocr.title or "").strip() or None
-            ocr_issue = (ocr.issue_number or "").strip() or None
-            ocr_publisher = (ocr.publisher or "").strip() or None
-            blob = (ocr.raw_text or "").lower()
-            facsimile = bool(_REPRINT_DIGEST.search(blob))
+        raw_text = (ocr.raw_text or "").strip()
+        if raw_text:
+            raw_ocr_excerpt = raw_text[:240]
+        blob = raw_text.lower()
+        facsimile = bool(_REPRINT_DIGEST.search(blob))
+        ocr_title = (ocr.title or "").strip() or None
+        ocr_issue = (ocr.issue_number or "").strip() or None
+        ocr_publisher = (ocr.publisher or "").strip() or None
+
+    if p105 is not None and getattr(p105, "fingerprint_confirmed", False):
+        facsimile = facsimile or bool(
+            _REPRINT_DIGEST.search(str(getattr(p105, "correction_reason", "") or "").lower())
+        )
 
     if not publisher and ocr_publisher:
         publisher = ocr_publisher
@@ -193,7 +203,8 @@ def gather_intake_gcd_recovery_hints(
         issue_number = encoded_issue
 
     if not series and ocr_title:
-        series = ocr_title
+        if has_reliable_series_hint(ocr_title) or ocr_confidence >= 0.35:
+            series = ocr_title
 
     validation = validate_barcode_catalog_match(
         normalized_barcode,
@@ -205,7 +216,7 @@ def gather_intake_gcd_recovery_hints(
         publisher = effective_publisher_for_barcode(normalized_barcode, None)
 
     series_norm = normalize_series_name(series) if series else ""
-    aliases = _series_norm_aliases(series_norm) if series_norm else []
+    aliases = _series_norm_aliases(series_norm) if series_norm and has_reliable_series_hint(series) else []
 
     return IntakeGcdRecoveryHints(
         publisher=publisher,
@@ -217,7 +228,50 @@ def gather_intake_gcd_recovery_hints(
         ocr_publisher=ocr_publisher,
         facsimile_or_reprint=facsimile,
         series_norm_aliases=aliases,
+        ocr_confidence=ocr_confidence,
+        raw_ocr_text_excerpt=raw_ocr_excerpt,
     )
+
+
+def build_p106_1_intake_hint_snapshot(
+    session: Session,
+    *,
+    item: Any,
+    barcode: str,
+    image_path: Path | None,
+    image_bytes: bytes | None,
+    p105: Any,
+) -> tuple[IntakeGcdRecoveryHints, dict[str, Any]]:
+    """Gather cover/barcode hints once for logging and P106.1 enrichment."""
+    hints = gather_intake_gcd_recovery_hints(
+        session,
+        item=item,
+        normalized_barcode=barcode,
+        image_path=image_path,
+        image_bytes=image_bytes,
+        p105=p105,
+    )
+    fp_count = len(_fingerprint_gcd_issue_ids(session, image_path=image_path))
+    snapshot = {
+        "barcode": barcode,
+        "intake_item_id": getattr(item, "id", None),
+        "image_path": str(image_path) if image_path else None,
+        "image_bytes_present": bool(image_bytes),
+        "ocr_title": hints.ocr_title,
+        "ocr_issue_number": hints.ocr_issue_number,
+        "ocr_publisher": hints.ocr_publisher,
+        "ocr_confidence": hints.ocr_confidence,
+        "inferred_series_hint": hints.series,
+        "series_hint_reliable": has_reliable_series_hint(hints.series),
+        "facsimile_or_reprint": hints.facsimile_or_reprint,
+        "fingerprint_candidate_count": fp_count,
+        "raw_ocr_text_excerpt": hints.raw_ocr_text_excerpt,
+        "recovery_hints_issue": hints.issue_number,
+        "recovery_hints_publisher": hints.publisher,
+        "recovery_hints_year": hints.year,
+        "p105_fingerprint_confirmed": bool(getattr(p105, "fingerprint_confirmed", False)) if p105 else False,
+    }
+    return hints, snapshot
 
 
 def _issue_number_sql_variants(issue_number: str | None) -> list[str]:
@@ -777,7 +831,12 @@ def diagnose_gcd_non_barcode_recovery(
                 "issue_number": hints.issue_number,
                 "year": hints.year,
                 "ocr_title": hints.ocr_title,
+                "ocr_issue_number": hints.ocr_issue_number,
+                "ocr_publisher": hints.ocr_publisher,
+                "ocr_confidence": hints.ocr_confidence,
+                "raw_ocr_text_excerpt": hints.raw_ocr_text_excerpt,
                 "facsimile_or_reprint": hints.facsimile_or_reprint,
+                "series_hint_reliable": has_reliable_series_hint(hints.series),
             },
             "gcd_non_barcode_candidate_count": len(publisher_filtered),
             "gcd_non_barcode_ranked": ranked[:5],
@@ -890,6 +949,7 @@ def enrich_gap_diagnosis_with_gcd_non_barcode_recovery(
     image_bytes: bytes | None,
     prior_diagnosis: dict[str, Any],
     p105: Any,
+    recovery_hints: IntakeGcdRecoveryHints | None = None,
 ) -> dict[str, Any]:
     if int(prior_diagnosis.get("gcd_match_count") or 0) > 0:
         logger.info(
@@ -900,7 +960,7 @@ def enrich_gap_diagnosis_with_gcd_non_barcode_recovery(
             prior_diagnosis.get("status"),
         )
         return prior_diagnosis
-    hints = gather_intake_gcd_recovery_hints(
+    hints = recovery_hints or gather_intake_gcd_recovery_hints(
         session,
         item=item,
         normalized_barcode=barcode,

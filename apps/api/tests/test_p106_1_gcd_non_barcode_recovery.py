@@ -20,6 +20,7 @@ from app.services.p106_1_gcd_non_barcode_recovery_service import (
     P106_1_IMPORT_REASON,
     P106_1_RECOVERY_STAGE,
     _score_candidate_breakdown,
+    build_p106_1_intake_hint_snapshot,
     diagnose_gcd_non_barcode_recovery,
     enrich_gap_diagnosis_with_gcd_non_barcode_recovery,
     gather_intake_gcd_recovery_hints,
@@ -290,6 +291,54 @@ def test_facsimile_ocr_boosts_facsimile_gcd_row(
 
 
 def test_has_reliable_series_hint_rejects_blank_and_generic() -> None:
+    assert has_reliable_series_hint(None) is False
+    assert has_reliable_series_hint("") is False
+    assert has_reliable_series_hint("Marvel") is False
+    assert has_reliable_series_hint("Facsimile Edition") is False
+    assert has_reliable_series_hint("Amazing Spider-Man") is True
+
+
+@patch("app.services.p106_1_gcd_non_barcode_recovery_service.extract_ocr_signal")
+def test_low_confidence_ocr_still_propagates_title_and_facsimile(
+    mock_ocr: MagicMock,
+    session: Session,
+    tmp_path: Path,
+) -> None:
+    mock_ocr.return_value = MagicMock(
+        confidence=0.22,
+        title="Amazing Spider-Man",
+        issue_number="1",
+        publisher="Marvel",
+        raw_text="Facsimile Edition Amazing Spider-Man #1",
+    )
+    item = _FakeIntakeItem(matched_issue_number="1")
+    hints = gather_intake_gcd_recovery_hints(
+        session,
+        item=item,
+        normalized_barcode="75960620629200111",
+        image_path=None,
+        image_bytes=b"fake",
+        p105=None,
+    )
+    assert hints.ocr_title == "Amazing Spider-Man"
+    assert hints.facsimile_or_reprint is True
+    assert hints.series == "Amazing Spider-Man"
+    assert has_reliable_series_hint(hints.series)
+
+
+def test_build_intake_hint_snapshot_includes_fingerprint_count(session: Session, tmp_path: Path) -> None:
+    item = _FakeIntakeItem(matched_publisher="Marvel", matched_issue_number="1")
+    _, snapshot = build_p106_1_intake_hint_snapshot(
+        session,
+        item=item,
+        barcode="75960620629200111",
+        image_path=None,
+        image_bytes=None,
+        p105=None,
+    )
+    assert snapshot["barcode"] == "75960620629200111"
+    assert "fingerprint_candidate_count" in snapshot
+    assert snapshot["image_bytes_present"] is False
     assert has_reliable_series_hint(None) is False
     assert has_reliable_series_hint("") is False
     assert has_reliable_series_hint("Marvel") is False
