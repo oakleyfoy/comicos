@@ -40,6 +40,7 @@ from app.models.p108_collection import (
     utc_now,
 )
 from app.models.p80_mobile_scan import P80MobileScan
+from app.services.legacy_spine_availability import legacy_customer_order_table_exists
 from app.services.collection_context import (
     ensure_default_real_collection,
     get_collection_for_user,
@@ -160,12 +161,13 @@ def clone_collection(
     target_id = int(target.id or 0)
 
     order_map: dict[int, int] = {}
-    for order in session.scalars(select(Order).where(Order.collection_id == source.id)).all():
-        copy = _row_copy(order, overrides={"collection_id": target_id})
-        session.add(copy)
-        session.flush()
-        if order.id is not None and copy.id is not None:
-            order_map[int(order.id)] = int(copy.id)
+    if legacy_customer_order_table_exists(session):
+        for order in session.scalars(select(Order).where(Order.collection_id == source.id)).all():
+            copy = _row_copy(order, overrides={"collection_id": target_id})
+            session.add(copy)
+            session.flush()
+            if order.id is not None and copy.id is not None:
+                order_map[int(order.id)] = int(copy.id)
 
     order_item_map: dict[int, int] = {}
     if order_map:
@@ -423,10 +425,11 @@ def _delete_collection_owned_rows(session: Session, *, collection_id: int) -> No
 
     session.execute(delete(InventoryCopy).where(InventoryCopy.collection_id == cid))
 
-    order_ids = list(session.scalars(select(Order.id).where(Order.collection_id == cid)).all())
-    if order_ids:
-        session.execute(delete(OrderItem).where(OrderItem.order_id.in_(order_ids)))
-    session.execute(delete(Order).where(Order.collection_id == cid))
+    if legacy_customer_order_table_exists(session):
+        order_ids = list(session.scalars(select(Order.id).where(Order.collection_id == cid)).all())
+        if order_ids:
+            session.execute(delete(OrderItem).where(OrderItem.order_id.in_(order_ids)))
+        session.execute(delete(Order).where(Order.collection_id == cid))
 
     pull_ids = list(session.scalars(select(PullList.id).where(PullList.collection_id == cid)).all())
     if pull_ids:

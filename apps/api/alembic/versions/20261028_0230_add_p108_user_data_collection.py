@@ -28,6 +28,12 @@ _COLLECTION_TABLES: tuple[tuple[str, str], ...] = (
 )
 
 
+def _scoped_tables_present(conn) -> list[tuple[str, str]]:
+    """Only alter tables that exist (production may have dropped legacy customer_order)."""
+    names = set(sa.inspect(conn).get_table_names())
+    return [(table, owner_col) for table, owner_col in _COLLECTION_TABLES if table in names]
+
+
 def upgrade() -> None:
     op.create_table(
         "user_data_collection",
@@ -71,7 +77,10 @@ def upgrade() -> None:
     )
     op.create_index("ix_user_active_collection_id", "user", ["active_collection_id"])
 
-    for table, _ in _COLLECTION_TABLES:
+    conn = op.get_bind()
+    scoped_tables = _scoped_tables_present(conn)
+
+    for table, _ in scoped_tables:
         op.add_column(table, sa.Column("collection_id", sa.Integer(), nullable=True))
         op.create_foreign_key(
             f"fk_{table}_collection_id",
@@ -82,7 +91,6 @@ def upgrade() -> None:
         )
         op.create_index(f"ix_{table}_collection_id", table, ["collection_id"])
 
-    conn = op.get_bind()
     users = conn.execute(sa.text("SELECT id FROM user")).fetchall()
     now = datetime.now(timezone.utc).isoformat()
     for (user_id,) in users:
@@ -105,7 +113,7 @@ def upgrade() -> None:
                 {"uid": user_id},
             ).scalar_one()
         )
-        for table, owner_col in _COLLECTION_TABLES:
+        for table, owner_col in scoped_tables:
             conn.execute(
                 sa.text(f"UPDATE {table} SET collection_id = :cid WHERE {owner_col} = :uid"),
                 {"cid": collection_id, "uid": user_id},
@@ -121,7 +129,9 @@ def downgrade() -> None:
     op.drop_index("ix_user_active_collection_id", table_name="user")
     op.drop_column("user", "active_collection_id")
 
-    for table, _ in reversed(_COLLECTION_TABLES):
+    conn = op.get_bind()
+    scoped_tables = _scoped_tables_present(conn)
+    for table, _ in reversed(scoped_tables):
         op.drop_index(f"ix_{table}_collection_id", table_name=table)
         op.drop_constraint(f"fk_{table}_collection_id", table, type_="foreignkey")
         op.drop_column(table, "collection_id")
