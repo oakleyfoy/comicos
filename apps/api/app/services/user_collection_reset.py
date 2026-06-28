@@ -6,7 +6,7 @@ import logging
 import traceback
 from dataclasses import dataclass, field
 
-from sqlalchemy import delete, func, select, update
+from sqlalchemy import delete, func, inspect, select, update
 from sqlalchemy.engine import Connection
 from sqlalchemy.exc import IntegrityError
 from sqlmodel import Session
@@ -22,6 +22,7 @@ from app.models import (
     User,
 )
 from app.models.p92_import_line_cover import P92ImportLineCoverResolution
+from app.services.legacy_spine_availability import legacy_customer_order_table_exists
 from app.services.user_collection_reset_plan import (
     DeletePlanStep,
     build_collection_reset_plan,
@@ -82,6 +83,13 @@ class UserCollectionResetError(Exception):
 
 def build_reset_delete_plan(*, validate: bool = True) -> list[DeletePlanStep]:
     return build_collection_reset_plan(validate=validate)
+
+
+def _reset_plan_for_session(session: Session, *, validate: bool = True) -> list[DeletePlanStep]:
+    """Drop plan steps whose tables are absent (e.g. legacy customer_order on production)."""
+    plan = build_reset_delete_plan(validate=validate)
+    table_names = set(inspect(session.get_bind()).get_table_names())
+    return [step for step in plan if step.table_name in table_names]
 
 
 def _break_delete_cycles(connection: Connection, scope: UserCollectionScope) -> None:
@@ -155,7 +163,11 @@ def remaining_collection_row_counts(session: Session, *, user_id: int) -> dict[s
         "inventory_copies": int(
             session.scalar(select(func.count()).select_from(InventoryCopy).where(InventoryCopy.user_id == user_id)) or 0
         ),
-        "orders": int(session.scalar(select(func.count()).select_from(Order).where(Order.user_id == user_id)) or 0),
+        "orders": int(
+            session.scalar(select(func.count()).select_from(Order).where(Order.user_id == user_id)) or 0
+        )
+        if legacy_customer_order_table_exists(session)
+        else 0,
         "draft_imports": int(
             session.scalar(select(func.count()).select_from(DraftImport).where(DraftImport.user_id == user_id)) or 0
         ),
@@ -202,7 +214,7 @@ def reset_user_collection_data(
     if user.id is None:
         raise ValueError("user must be persisted")
     scope = build_user_collection_scope(session, user_id=int(user.id))
-    plan = build_reset_delete_plan(validate=True)
+    plan = _reset_plan_for_session(session, validate=True)
     summaries: list[TableDeleteSummary] = []
 
     engine = session.get_bind()

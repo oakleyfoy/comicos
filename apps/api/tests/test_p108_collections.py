@@ -68,7 +68,7 @@ def test_clone_independent_copy(client: TestClient, session: Session) -> None:
     clone_id = resp.json()["id"]
     session.expire_all()
     assert resp.json()["collection_type"] == COLLECTION_TYPE_TEST
-    assert "Test Copy of" in resp.json()["name"]
+    assert resp.json()["name"].startswith("Test Copy -")
 
     source_inv = session.exec(
         select(InventoryCopy).where(InventoryCopy.collection_id == real.id)
@@ -161,3 +161,79 @@ def test_inventory_filtered_by_active_collection(client: TestClient, session: Se
     inv2 = client.get("/inventory", headers=auth_headers(token))
     assert inv2.status_code == 200
     assert inv2.json()["total"] == 0
+
+
+def test_create_test_collection(client: TestClient, session: Session) -> None:
+    token = register_and_login(client, "p108-create@example.com")
+    resp = client.post(
+        "/api/collections",
+        headers=auth_headers(token),
+        json={"name": "Scanner Regression", "collection_type": "test"},
+    )
+    assert resp.status_code == 201
+    body = resp.json()
+    assert body["name"] == "Scanner Regression"
+    assert body["collection_type"] == COLLECTION_TYPE_TEST
+    assert body["stats"]["books"] == 0
+
+
+def test_switch_active_collection(client: TestClient, session: Session) -> None:
+    token = register_and_login(client, "p108-switch@example.com")
+    user = session.exec(select(User).where(User.email == "p108-switch@example.com")).one()
+    real = ensure_default_real_collection(session, user_id=int(user.id or 0))
+    clone = clone_collection(session, user_id=int(user.id or 0), source_collection_id=int(real.id or 0))
+    session.commit()
+
+    switch = client.post("/api/collections/active", headers=auth_headers(token), json={"collection_id": clone.id})
+    assert switch.status_code == 200
+    listed = client.get("/api/collections", headers=auth_headers(token))
+    assert listed.json()["active_collection_id"] == clone.id
+
+
+def test_order_isolation_when_legacy_orders_exist(client: TestClient, session: Session) -> None:
+    from app.services.legacy_spine_availability import legacy_customer_order_table_exists
+
+    if not legacy_customer_order_table_exists(session):
+        return
+    token = register_and_login(client, "p108-order-iso@example.com")
+    user = session.exec(select(User).where(User.email == "p108-order-iso@example.com")).one()
+    real = ensure_default_real_collection(session, user_id=int(user.id or 0))
+    clone = clone_collection(session, user_id=int(user.id or 0), source_collection_id=int(real.id or 0))
+    session.commit()
+    _seed_order_and_copy(session, user_id=int(user.id or 0), collection_id=int(real.id or 0))
+
+    client.post("/api/collections/active", headers=auth_headers(token), json={"collection_id": clone.id})
+    inv = client.get("/inventory", headers=auth_headers(token))
+    assert inv.json()["total"] == 0
+
+    client.post("/api/collections/active", headers=auth_headers(token), json={"collection_id": real.id})
+    inv_real = client.get("/inventory", headers=auth_headers(token))
+    assert inv_real.json()["total"] >= 1
+
+
+def test_scan_stats_and_isolation(client: TestClient, session: Session) -> None:
+    from datetime import datetime, timedelta, timezone
+
+    from app.models import PhotoImportSession
+
+    token = register_and_login(client, "p108-scan-iso@example.com")
+    user = session.exec(select(User).where(User.email == "p108-scan-iso@example.com")).one()
+    real = ensure_default_real_collection(session, user_id=int(user.id or 0))
+    clone = clone_collection(session, user_id=int(user.id or 0), source_collection_id=int(real.id or 0))
+    session.commit()
+    session.add(
+        PhotoImportSession(
+            user_id=int(user.id or 0),
+            collection_id=int(real.id or 0),
+            session_token="scan-stats-token",
+            status="created",
+            expires_at=datetime.now(timezone.utc) + timedelta(hours=1),
+        )
+    )
+    session.commit()
+
+    listed = client.get("/api/collections", headers=auth_headers(token))
+    real_row = next(item for item in listed.json()["items"] if item["id"] == real.id)
+    clone_row = next(item for item in listed.json()["items"] if item["id"] == clone.id)
+    assert real_row["stats"]["scans"] >= 1
+    assert clone_row["stats"]["scans"] == 0

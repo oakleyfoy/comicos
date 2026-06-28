@@ -7,6 +7,13 @@ from datetime import datetime
 from pydantic import BaseModel, Field
 
 
+class CollectionStats(BaseModel):
+    books: int = 0
+    orders: int = 0
+    scans: int = 0
+    retailer_imports: int = 0
+
+
 class CollectionRead(BaseModel):
     id: int
     name: str
@@ -16,6 +23,7 @@ class CollectionRead(BaseModel):
     source_snapshot_at: datetime | None = None
     created_at: datetime
     updated_at: datetime
+    stats: CollectionStats = Field(default_factory=CollectionStats)
 
 
 class CollectionListResponse(BaseModel):

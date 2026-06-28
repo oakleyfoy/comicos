@@ -108,6 +108,8 @@ class IntakeGcdRecoveryHints:
     series_norm_aliases: list[str] = field(default_factory=list)
     ocr_confidence: float = 0.0
     raw_ocr_text_excerpt: str | None = None
+    ocr_engine_available: bool = True
+    ocr_error: str | None = None
 
 
 def _gcd_barcode_column_empty(raw: Any) -> bool:
@@ -170,13 +172,17 @@ def gather_intake_gcd_recovery_hints(
     facsimile = False
     ocr_confidence = 0.0
     raw_ocr_excerpt: str | None = None
+    ocr_engine_available = True
+    ocr_error: str | None = None
 
     if image_bytes:
         ocr = extract_ocr_signal(image_bytes, source_name=f"intake-{getattr(item, 'id', 0)}")
         ocr_confidence = float(ocr.confidence or 0.0)
+        ocr_engine_available = bool(getattr(ocr, "ocr_engine_available", True))
+        ocr_error = getattr(ocr, "ocr_error", None)
         raw_text = (ocr.raw_text or "").strip()
         if raw_text:
-            raw_ocr_excerpt = raw_text[:240]
+            raw_ocr_excerpt = raw_text[:500]
         blob = raw_text.lower()
         facsimile = bool(_REPRINT_DIGEST.search(blob))
         ocr_title = (ocr.title or "").strip() or None
@@ -230,6 +236,8 @@ def gather_intake_gcd_recovery_hints(
         series_norm_aliases=aliases,
         ocr_confidence=ocr_confidence,
         raw_ocr_text_excerpt=raw_ocr_excerpt,
+        ocr_engine_available=ocr_engine_available,
+        ocr_error=ocr_error,
     )
 
 
@@ -266,6 +274,8 @@ def build_p106_1_intake_hint_snapshot(
         "facsimile_or_reprint": hints.facsimile_or_reprint,
         "fingerprint_candidate_count": fp_count,
         "raw_ocr_text_excerpt": hints.raw_ocr_text_excerpt,
+        "ocr_engine_available": hints.ocr_engine_available,
+        "ocr_error": hints.ocr_error,
         "recovery_hints_issue": hints.issue_number,
         "recovery_hints_publisher": hints.publisher,
         "recovery_hints_year": hints.year,
@@ -717,6 +727,33 @@ def _log_p106_1_instrumentation(
     logger.info("p106_1.instrumentation %s", json.dumps(payload, default=str))
 
 
+def _recovery_hints_payload(hints: IntakeGcdRecoveryHints) -> dict[str, Any]:
+    return {
+        "publisher": hints.publisher,
+        "series": hints.series,
+        "issue_number": hints.issue_number,
+        "year": hints.year,
+        "ocr_title": hints.ocr_title,
+        "ocr_issue_number": hints.ocr_issue_number,
+        "ocr_publisher": hints.ocr_publisher,
+        "ocr_confidence": hints.ocr_confidence,
+        "raw_ocr_text_excerpt": hints.raw_ocr_text_excerpt,
+        "facsimile_or_reprint": hints.facsimile_or_reprint,
+        "series_hint_reliable": has_reliable_series_hint(hints.series),
+        "ocr_engine_available": hints.ocr_engine_available,
+        "ocr_error": hints.ocr_error,
+    }
+
+
+def _ocr_unavailable_instrumentation(hints: IntakeGcdRecoveryHints) -> dict[str, Any]:
+    if hints.ocr_engine_available:
+        return {}
+    return {
+        "ocr_engine_available": False,
+        "ocr_error": hints.ocr_error or "Local Tesseract OCR engine is unavailable on this host.",
+    }
+
+
 def diagnose_gcd_non_barcode_recovery(
     session: Session,
     *,
@@ -730,6 +767,7 @@ def diagnose_gcd_non_barcode_recovery(
     """Build a P106-compatible diagnosis when barcode lookup missed but metadata finds one GCD issue."""
     base = dict(prior_diagnosis)
     base["normalized_barcode"] = normalize_scan_preserving_supplement(barcode) or barcode
+    base["fingerprint_candidate_count"] = len(_fingerprint_gcd_issue_ids(session, image_path=image_path))
     if int(prior_diagnosis.get("gcd_match_count") or 0) > 0:
         base["p106_1_skipped"] = True
         base["p106_1_skip_reason"] = "prior_p106_gcd_match_count_nonzero"
@@ -741,6 +779,7 @@ def diagnose_gcd_non_barcode_recovery(
             "decision_reason": "insufficient_metadata",
             "ready_to_auto_import": False,
             "gcd_candidates": [],
+            **_ocr_unavailable_instrumentation(hints),
         }
         _log_p106_1_instrumentation(
             barcode=barcode,
@@ -753,6 +792,7 @@ def diagnose_gcd_non_barcode_recovery(
                 "recovery_stage": P106_1_RECOVERY_STAGE,
                 "recovery_reason": "insufficient_metadata",
                 "ready_to_auto_import": False,
+                "recovery_hints": _recovery_hints_payload(hints),
                 "p106_1_instrumentation": instrumentation,
             }
         )
@@ -779,6 +819,7 @@ def diagnose_gcd_non_barcode_recovery(
             "publisher_filtered_count": len(publisher_filtered),
             "scorable_candidate_count": 0,
             "series_hint_reliable": has_reliable_series_hint(hints.series),
+            **_ocr_unavailable_instrumentation(hints),
         }
         _log_p106_1_instrumentation(
             barcode=barcode,
@@ -796,6 +837,7 @@ def diagnose_gcd_non_barcode_recovery(
                 "reason": pool_block,
                 "final_reason": pool_block,
                 "gcd_match_count": 0,
+                "recovery_hints": _recovery_hints_payload(hints),
                 "p106_1_instrumentation": instrumentation,
             }
         )
@@ -818,6 +860,8 @@ def diagnose_gcd_non_barcode_recovery(
         "fingerprint_top_hits": fingerprint_hits,
         "pick_decision": pick_decision,
         "gcd_candidates": pick_decision.get("candidates_scored") or [],
+        "fingerprint_candidate_count": base.get("fingerprint_candidate_count"),
+        **_ocr_unavailable_instrumentation(hints),
     }
 
     base.update(
@@ -825,19 +869,7 @@ def diagnose_gcd_non_barcode_recovery(
             "recovery_stage": P106_1_RECOVERY_STAGE,
             "exact_barcode_path": False,
             "bypass_p1035_text_matching": True,
-            "recovery_hints": {
-                "publisher": hints.publisher,
-                "series": hints.series,
-                "issue_number": hints.issue_number,
-                "year": hints.year,
-                "ocr_title": hints.ocr_title,
-                "ocr_issue_number": hints.ocr_issue_number,
-                "ocr_publisher": hints.ocr_publisher,
-                "ocr_confidence": hints.ocr_confidence,
-                "raw_ocr_text_excerpt": hints.raw_ocr_text_excerpt,
-                "facsimile_or_reprint": hints.facsimile_or_reprint,
-                "series_hint_reliable": has_reliable_series_hint(hints.series),
-            },
+            "recovery_hints": _recovery_hints_payload(hints),
             "gcd_non_barcode_candidate_count": len(publisher_filtered),
             "gcd_non_barcode_ranked": ranked[:5],
             "p106_1_instrumentation": instrumentation,

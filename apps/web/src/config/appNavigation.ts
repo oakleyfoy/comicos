@@ -136,6 +136,7 @@ export const NAV_GROUPS: NavGroup[] = [
       { label: "Collector Profile", to: "/collector-profile", prominent: true },
       { label: "Collector Budget", to: "/collector-budget" },
       { label: "Account & data", to: "/settings/account" },
+      { label: "Collections", to: "/settings/collections" },
       { label: "Data Protection", to: "/data-protection", hiddenFromNav: true },
       { label: "Workflow Health", to: "/workflow-health" },
     ],

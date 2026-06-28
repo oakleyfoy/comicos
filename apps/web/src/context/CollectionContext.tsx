@@ -3,12 +3,22 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useState, t
 import { getStoredToken } from "../api/client";
 import { useAuth } from "../auth/AuthContext";
 
+export type CollectionStats = {
+  books: number;
+  orders: number;
+  scans: number;
+  retailer_imports: number;
+};
+
 export type CollectionSummary = {
   id: number;
   name: string;
   collection_type: "real" | "test" | "sandbox";
   is_default: boolean;
   source_collection_id: number | null;
+  stats?: CollectionStats;
+  created_at?: string;
+  updated_at?: string;
 };
 
 type CollectionContextValue = {
@@ -16,9 +26,11 @@ type CollectionContextValue = {
   activeCollectionId: number | null;
   activeCollection: CollectionSummary | null;
   loading: boolean;
+  error: string | null;
   refresh: () => Promise<void>;
   setActiveCollection: (collectionId: number) => Promise<void>;
-  cloneCollection: (sourceId: number) => Promise<CollectionSummary>;
+  createCollection: (name: string) => Promise<CollectionSummary>;
+  cloneCollection: (sourceId: number, name?: string) => Promise<CollectionSummary>;
   resetCollection: (collectionId: number) => Promise<void>;
   deleteCollection: (collectionId: number) => Promise<void>;
 };
@@ -49,15 +61,18 @@ export function CollectionProvider({ children }: { children: ReactNode }) {
   const [collections, setCollections] = useState<CollectionSummary[]>([]);
   const [activeCollectionId, setActiveCollectionId] = useState<number | null>(null);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const refresh = useCallback(async () => {
     const token = getStoredToken();
     if (!token) {
       setCollections([]);
       setActiveCollectionId(null);
+      setError(null);
       return;
     }
     setLoading(true);
+    setError(null);
     try {
       const body = await apiFetch<{ active_collection_id: number | null; items: CollectionSummary[] }>(
         token,
@@ -65,6 +80,10 @@ export function CollectionProvider({ children }: { children: ReactNode }) {
       );
       setCollections(body.items);
       setActiveCollectionId(body.active_collection_id);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Unable to load collections.");
+      setCollections([]);
+      setActiveCollectionId(null);
     } finally {
       setLoading(false);
     }
@@ -91,15 +110,31 @@ export function CollectionProvider({ children }: { children: ReactNode }) {
     [refresh],
   );
 
+  const createCollection = useCallback(
+    async (name: string) => {
+      const token = getStoredToken();
+      if (!token) {
+        throw new Error("Not authenticated");
+      }
+      const row = await apiFetch<CollectionSummary>(token, "/api/collections", {
+        method: "POST",
+        body: JSON.stringify({ name, collection_type: "test" }),
+      });
+      await refresh();
+      return row;
+    },
+    [refresh],
+  );
+
   const cloneCollection = useCallback(
-    async (sourceId: number) => {
+    async (sourceId: number, name?: string) => {
       const token = getStoredToken();
       if (!token) {
         throw new Error("Not authenticated");
       }
       const row = await apiFetch<CollectionSummary>(token, `/api/collections/${sourceId}/clone`, {
         method: "POST",
-        body: JSON.stringify({}),
+        body: JSON.stringify(name ? { name } : {}),
       });
       await refresh();
       return row;
@@ -145,8 +180,10 @@ export function CollectionProvider({ children }: { children: ReactNode }) {
       activeCollectionId,
       activeCollection,
       loading,
+      error,
       refresh,
       setActiveCollection,
+      createCollection,
       cloneCollection,
       resetCollection,
       deleteCollection,
@@ -156,7 +193,9 @@ export function CollectionProvider({ children }: { children: ReactNode }) {
       activeCollectionId,
       cloneCollection,
       collections,
+      createCollection,
       deleteCollection,
+      error,
       loading,
       refresh,
       resetCollection,

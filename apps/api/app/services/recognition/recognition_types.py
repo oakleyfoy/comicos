@@ -17,6 +17,8 @@ class RecognitionOCRSignal:
     publisher: str | None
     variant: str | None
     confidence: float
+    ocr_engine_available: bool = True
+    ocr_error: str | None = None
 
 
 @dataclass(frozen=True)

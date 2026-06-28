@@ -709,8 +709,86 @@ def barcode_gap_action_from_diagnosis(diagnosis: dict[str, Any]) -> str | None:
     return None
 
 
-def barcode_gap_payload_from_diagnosis(diagnosis: dict[str, Any]) -> dict[str, Any]:
+_P1061_BARCODE_GAP_RAW_OCR_MAX = 500
+_P1061_BARCODE_GAP_CANDIDATE_MAX = 10
+
+
+def _truncate_barcode_gap_text(value: Any, *, max_len: int) -> str | None:
+    if value is None:
+        return None
+    text = str(value)
+    if len(text) <= max_len:
+        return text
+    return text[:max_len]
+
+
+def _bound_barcode_gap_recovery_hints(hints: Any) -> dict[str, Any] | None:
+    if not isinstance(hints, dict):
+        return None
+    bounded = dict(hints)
+    bounded["raw_ocr_text_excerpt"] = _truncate_barcode_gap_text(
+        bounded.get("raw_ocr_text_excerpt"),
+        max_len=_P1061_BARCODE_GAP_RAW_OCR_MAX,
+    )
+    return bounded
+
+
+def _bound_barcode_gap_instrumentation(inst: Any) -> dict[str, Any] | None:
+    if not isinstance(inst, dict):
+        return None
+    bounded = {key: value for key, value in inst.items() if key not in {"image_bytes", "full_image"}}
+    for list_key in ("gcd_candidates", "fingerprint_top_hits", "candidates_scored"):
+        raw_list = bounded.get(list_key)
+        if isinstance(raw_list, list):
+            bounded[list_key] = raw_list[:_P1061_BARCODE_GAP_CANDIDATE_MAX]
+    pick = bounded.get("pick_decision")
+    if isinstance(pick, dict):
+        pick_copy = dict(pick)
+        scored = pick_copy.get("candidates_scored")
+        if isinstance(scored, list):
+            pick_copy["candidates_scored"] = scored[:_P1061_BARCODE_GAP_CANDIDATE_MAX]
+        bounded["pick_decision"] = pick_copy
+    return bounded
+
+
+def _p106_1_observability_from_diagnosis(diagnosis: dict[str, Any]) -> dict[str, Any]:
+    hints = diagnosis.get("recovery_hints") if isinstance(diagnosis.get("recovery_hints"), dict) else {}
+    inst = diagnosis.get("p106_1_instrumentation") if isinstance(diagnosis.get("p106_1_instrumentation"), dict) else {}
+
+    fp_count = diagnosis.get("fingerprint_candidate_count")
+    if fp_count is None:
+        fp_count = inst.get("fingerprint_candidate_count")
+    if fp_count is None and isinstance(inst.get("fingerprint_top_hits"), list):
+        fp_count = len(inst["fingerprint_top_hits"])
+
+    raw_excerpt = hints.get("raw_ocr_text_excerpt")
+    if raw_excerpt is None:
+        raw_excerpt = diagnosis.get("raw_ocr_text_excerpt")
+
     return {
+        "recovery_stage": diagnosis.get("recovery_stage"),
+        "recovery_reason": diagnosis.get("recovery_reason"),
+        "recovery_block_reason": diagnosis.get("recovery_block_reason"),
+        "recovery_hints": _bound_barcode_gap_recovery_hints(hints),
+        "p106_1_instrumentation": _bound_barcode_gap_instrumentation(inst),
+        "p106_1_skipped": diagnosis.get("p106_1_skipped"),
+        "ocr_title": hints.get("ocr_title") or diagnosis.get("ocr_title"),
+        "ocr_issue_number": hints.get("ocr_issue_number") or diagnosis.get("ocr_issue_number"),
+        "ocr_publisher": hints.get("ocr_publisher") or diagnosis.get("ocr_publisher"),
+        "ocr_confidence": hints.get("ocr_confidence") if hints.get("ocr_confidence") is not None else diagnosis.get("ocr_confidence"),
+        "raw_ocr_text_excerpt": _truncate_barcode_gap_text(raw_excerpt, max_len=_P1061_BARCODE_GAP_RAW_OCR_MAX),
+        "facsimile_or_reprint": hints.get("facsimile_or_reprint")
+        if hints.get("facsimile_or_reprint") is not None
+        else diagnosis.get("facsimile_or_reprint"),
+        "series_hint_reliable": hints.get("series_hint_reliable")
+        if hints.get("series_hint_reliable") is not None
+        else diagnosis.get("series_hint_reliable"),
+        "fingerprint_candidate_count": fp_count,
+    }
+
+
+def barcode_gap_payload_from_diagnosis(diagnosis: dict[str, Any]) -> dict[str, Any]:
+    payload = {
         "ready_to_auto_import": diagnosis.get("ready_to_auto_import"),
         "status": diagnosis.get("status"),
         "reason": diagnosis.get("reason"),
@@ -724,6 +802,8 @@ def barcode_gap_payload_from_diagnosis(diagnosis: dict[str, Any]) -> dict[str, A
         "gcd_issue_number": _gcd_display_issue_number(diagnosis),
         "gcd_publisher": _gcd_display_publisher(diagnosis),
     }
+    payload.update(_p106_1_observability_from_diagnosis(diagnosis))
+    return payload
 
 
 def _gcd_display_series(diagnosis: dict[str, Any]) -> str | None:

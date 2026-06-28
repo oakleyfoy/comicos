@@ -250,6 +250,11 @@ def build_scanner_barcode_event(
         event["p106_gcd_lookup_final_reason"] = diag.get("gcd_lookup_final_reason")
     elif diag.get("gcd_lookup_final_reason"):
         event["p106_gcd_lookup_final_reason"] = diag.get("gcd_lookup_final_reason")
+    gap_payload = barcode_gap_payload_from_diagnosis(diag) if diag else {}
+    if gap_payload.get("recovery_block_reason"):
+        event["recovery_block_reason"] = gap_payload.get("recovery_block_reason")
+    elif diag.get("recovery_block_reason"):
+        event["recovery_block_reason"] = diag.get("recovery_block_reason")
     event["bucket"] = classify_scanner_barcode_bucket(event)
     return event
 

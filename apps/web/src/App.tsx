@@ -21,6 +21,7 @@ import { GcdIdentityBackfillDashboardPage } from "./pages/GcdIdentityBackfillDas
 import { MasterUniversePage } from "./pages/MasterUniversePage";
 import { IntegrationsPage } from "./pages/IntegrationsPage";
 import { AccountSettingsPage } from "./pages/AccountSettingsPage";
+import { CollectionsSettingsPage } from "./pages/CollectionsSettingsPage";
 import { ConnectedRetailersPage } from "./pages/ConnectedRetailersPage";
 import { AddComicsImportFolderPage } from "./pages/addComics/AddComicsImportFolderPage";
 import { AddComicsManualPage } from "./pages/addComics/AddComicsManualPage";
@@ -524,6 +525,7 @@ export default function App() {
         <Route path="/settings/connected-retailers" element={<ConnectedRetailersPage />} />
         <Route path="/settings/integrations" element={<IntegrationsPage />} />
         <Route path="/settings/account" element={<AccountSettingsPage />} />
+        <Route path="/settings/collections" element={<CollectionsSettingsPage />} />
         <Route path="/settings/scanner-profiles" element={<ScannerProfilesPage />} />
         </Route>
       </Route>

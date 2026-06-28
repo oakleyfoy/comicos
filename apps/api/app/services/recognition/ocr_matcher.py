@@ -91,7 +91,14 @@ def _ocr_confidence(raw_text: str, *, title: str | None, issue_number: str | Non
     return round(max(0.0, min(base, 1.0)), 6)
 
 
-def _empty_ocr_signal() -> RecognitionOCRSignal:
+OCR_UNAVAILABLE_MESSAGE = "Local Tesseract OCR engine is unavailable on this host."
+
+
+def _empty_ocr_signal(
+    *,
+    ocr_engine_available: bool = True,
+    ocr_error: str | None = None,
+) -> RecognitionOCRSignal:
     """OCR-unavailable fallback so recognition can still use image/fingerprint signals."""
     return RecognitionOCRSignal(
         raw_text="",
@@ -101,6 +108,8 @@ def _empty_ocr_signal() -> RecognitionOCRSignal:
         publisher=None,
         variant=None,
         confidence=0.0,
+        ocr_engine_available=ocr_engine_available,
+        ocr_error=ocr_error,
     )
 
 
@@ -116,6 +125,12 @@ def extract_ocr_signal(image_bytes: bytes, *, source_name: str = "upload") -> Re
         # times out, or the image cannot be rasterized, degrade gracefully to an
         # empty OCR signal rather than failing the whole recognition request.
         LOGGER.warning("recognition OCR skipped source=%r reason=%s", source_name, str(exc)[:300])
+        msg = str(exc)
+        if isinstance(exc, OSError) or OCR_UNAVAILABLE_MESSAGE in msg:
+            return _empty_ocr_signal(
+                ocr_engine_available=False,
+                ocr_error=OCR_UNAVAILABLE_MESSAGE,
+            )
         return _empty_ocr_signal()
 
     normalized_text = normalize_ocr_text(raw_text)
@@ -136,6 +151,8 @@ def extract_ocr_signal(image_bytes: bytes, *, source_name: str = "upload") -> Re
         publisher=publisher,
         variant=variant,
         confidence=confidence,
+        ocr_engine_available=True,
+        ocr_error=None,
     )
 
 

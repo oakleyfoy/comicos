@@ -50,9 +50,9 @@ from app.services.collection_context import (
 logger = logging.getLogger(__name__)
 
 
-def _default_clone_name(source_name: str) -> str:
+def _default_clone_name(_source_name: str) -> str:
     stamp = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M")
-    return f"Test Copy of {source_name} - {stamp}"
+    return f"Test Copy - {stamp}"
 
 
 def _clear_other_defaults(session: Session, *, owner_user_id: int, keep_id: int | None = None) -> None:
@@ -76,6 +76,49 @@ def list_collections_for_user(session: Session, *, user_id: int) -> list[UserDat
             .order_by(UserDataCollection.is_default.desc(), UserDataCollection.id.asc())
         ).all()
     )
+
+
+def collection_stats(session: Session, *, collection_id: int) -> dict[str, int]:
+    """Aggregate counts for collection management UI."""
+    cid = int(collection_id)
+    books = int(
+        session.scalar(
+            select(func.count()).select_from(InventoryCopy).where(InventoryCopy.collection_id == cid)
+        )
+        or 0
+    )
+    if legacy_customer_order_table_exists(session):
+        orders = int(session.scalar(select(func.count()).select_from(Order).where(Order.collection_id == cid)) or 0)
+    else:
+        orders = int(
+            session.scalar(
+                select(func.count())
+                .select_from(RetailerOrderSnapshot)
+                .where(RetailerOrderSnapshot.collection_id == cid)
+            )
+            or 0
+        )
+    scans = sum(
+        int(
+            session.scalar(
+                select(func.count()).select_from(model).where(model.collection_id == cid)  # type: ignore[attr-defined]
+            )
+            or 0
+        )
+        for model in (PhotoImportSession, InventoryScanSession, IntakeSession, P80MobileScan)
+    )
+    retailer_imports = int(
+        session.scalar(
+            select(func.count()).select_from(RetailerSyncRun).where(RetailerSyncRun.collection_id == cid)
+        )
+        or 0
+    )
+    return {
+        "books": books,
+        "orders": orders,
+        "scans": scans,
+        "retailer_imports": retailer_imports,
+    }
 
 
 def create_collection(

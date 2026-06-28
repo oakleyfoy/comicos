@@ -73,7 +73,14 @@ def preview_reset_collection_data(
     current_user: User = Depends(get_current_user),
 ) -> CollectionResetPreviewResponse:
     """Dry-run: report what would be deleted without mutating data."""
-    result = reset_user_collection_data(session, user=current_user, execute=False)
+    try:
+        result = reset_user_collection_data(session, user=current_user, execute=False)
+    except Exception:
+        logger.exception("collection_reset preview failed user_id=%s", current_user.id)
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Unable to load collection reset preview. Try again or use Settings → Collections to manage test workspaces.",
+        ) from None
     session.expire_all()
     remaining = remaining_collection_row_counts(session, user_id=int(current_user.id or 0))
     return CollectionResetPreviewResponse(

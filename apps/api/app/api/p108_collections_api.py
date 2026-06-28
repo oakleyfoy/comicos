@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+import logging
+
 from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy.exc import OperationalError, ProgrammingError
 from sqlmodel import Session
 
 from app.api.deps import get_current_user
@@ -17,11 +20,13 @@ from app.schemas.p108_collection import (
     CollectionListResponse,
     CollectionRead,
     CollectionResetRequest,
+    CollectionStats,
 )
 from app.services.collection_context import resolve_active_collection
 from app.services.ops_access import is_ops_admin_user
 from app.services.p108_collection_service import (
     clone_collection,
+    collection_stats,
     create_collection,
     list_collections_for_user,
     reset_collection,
@@ -30,10 +35,13 @@ from app.services.p108_collection_service import (
     soft_delete_collection,
 )
 
+logger = logging.getLogger(__name__)
+
 p108_collections_router = APIRouter(prefix="/api/collections", tags=["collections"])
 
 
-def _read(row: UserDataCollection) -> CollectionRead:
+def _read(session: Session, row: UserDataCollection) -> CollectionRead:
+    stats_row = collection_stats(session, collection_id=int(row.id or 0))
     return CollectionRead(
         id=int(row.id or 0),
         name=row.name,
@@ -43,6 +51,7 @@ def _read(row: UserDataCollection) -> CollectionRead:
         source_snapshot_at=row.source_snapshot_at,
         created_at=row.created_at,
         updated_at=row.updated_at,
+        stats=CollectionStats(**stats_row),
     )
 
 
@@ -52,13 +61,20 @@ def list_collections(
     current_user: User = Depends(get_current_user),
 ) -> CollectionListResponse:
     assert current_user.id is not None
-    resolve_active_collection(session, current_user)
-    session.commit()
-    session.refresh(current_user)
-    rows = list_collections_for_user(session, user_id=int(current_user.id))
+    try:
+        resolve_active_collection(session, current_user)
+        session.commit()
+        session.refresh(current_user)
+        rows = list_collections_for_user(session, user_id=int(current_user.id))
+    except (OperationalError, ProgrammingError) as exc:
+        logger.exception("collections list failed user_id=%s", current_user.id)
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Collections are not available yet. Run database migrations (P108) and try again.",
+        ) from exc
     return CollectionListResponse(
         active_collection_id=current_user.active_collection_id,
-        items=[_read(row) for row in rows],
+        items=[_read(session, row) for row in rows],
     )
 
 
@@ -77,7 +93,7 @@ def post_collection(
     )
     session.commit()
     session.refresh(row)
-    return _read(row)
+    return _read(session, row)
 
 
 @p108_collections_router.post("/{collection_id}/clone", response_model=CollectionRead)
@@ -97,7 +113,7 @@ def post_clone_collection(
     )
     session.commit()
     session.refresh(row)
-    return _read(row)
+    return _read(session, row)
 
 
 @p108_collections_router.post("/{collection_id}/set-default", response_model=CollectionRead)
@@ -110,7 +126,7 @@ def post_set_default_collection(
     row = set_default_collection(session, user_id=int(current_user.id), collection_id=collection_id)
     session.commit()
     session.refresh(row)
-    return _read(row)
+    return _read(session, row)
 
 
 @p108_collections_router.post("/active", response_model=CollectionRead)
@@ -123,7 +139,7 @@ def post_set_active_collection(
     session.commit()
     session.refresh(row)
     session.refresh(current_user)
-    return _read(row)
+    return _read(session, row)
 
 
 @p108_collections_router.post("/{collection_id}/reset", response_model=CollectionRead)
@@ -143,7 +159,7 @@ def post_reset_collection(
     )
     session.commit()
     session.refresh(row)
-    return _read(row)
+    return _read(session, row)
 
 
 @p108_collections_router.delete("/{collection_id}", status_code=status.HTTP_204_NO_CONTENT)

@@ -2,7 +2,8 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, typ
 import { Link, useLocation, useNavigate } from "react-router-dom";
 
 import { useAuth } from "../auth/AuthContext";
-import { CollectionSwitcherBar } from "./CollectionSwitcherBar";
+import { CollectionHeaderSwitcher } from "./CollectionHeaderSwitcher";
+import { CollectionTestBanner } from "./CollectionTestBanner";
 import { ComicOsMark } from "./ComicOsMark";
 import {
   DEFAULT_EXPANDED_GROUP_IDS,
@@ -250,14 +251,18 @@ export function AppShell({ children }: { children: ReactNode }) {
               Portfolio Intelligence for Comic Investors
             </p>
           </div>
-          <Link
-            to="/collector-home"
-            className="hidden rounded-lg border border-white/40 bg-patriot-red px-3 py-1.5 text-sm font-semibold text-white hover:bg-red-700 sm:inline-flex"
-          >
-            Collector Home
-          </Link>
+          <div className="flex shrink-0 items-center gap-3">
+            {isAuthenticated ? <CollectionHeaderSwitcher /> : null}
+            <Link
+              to="/collector-home"
+              className="hidden rounded-lg border border-white/40 bg-patriot-red px-3 py-1.5 text-sm font-semibold text-white hover:bg-red-700 sm:inline-flex"
+            >
+              Collector Home
+            </Link>
+          </div>
         </div>
       </header>
+      {isAuthenticated ? <CollectionTestBanner /> : null}
 
       <div className="mx-auto flex max-w-[1600px] gap-6 px-4 py-4 sm:px-6 lg:px-8">
         <aside
@@ -276,7 +281,6 @@ export function AppShell({ children }: { children: ReactNode }) {
         </aside>
 
         <main className="min-w-0 flex-1 pb-8">
-          {isAuthenticated ? <CollectionSwitcherBar /> : null}
           {children}
         </main>
       </div>

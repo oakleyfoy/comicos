@@ -1137,6 +1137,7 @@ from app.api.acquisitions import attach_acquisition_layer
 from app.api.photo_import import attach_photo_import_layer
 from app.api.intake_queue import attach_intake_queue_layer
 from app.api.p108_collections_api import attach_p108_collections_layer
+from app.api.ocr_health_ops import attach_ocr_health_ops_layer
 from app.api.gpt_comic_read import attach_gpt_comic_read_layer
 from app.api.catalog_universe import attach_catalog_universe_layer
 from app.api.catalog_import_dashboard import attach_catalog_import_dashboard_layer
@@ -1368,6 +1369,29 @@ app = FastAPI(title="ComicOS API")
 
 
 @app.on_event("startup")
+def _log_tesseract_on_startup() -> None:
+    from app.services.cover_images import _resolve_ocr_engine_cmd, get_tesseract_engine_version
+
+    configured = (settings.tesseract_cmd or "").strip()
+    resolved = _resolve_ocr_engine_cmd()
+    version = get_tesseract_engine_version()
+    if version:
+        _startup_logger.info(
+            "ocr.tesseract.startup TESSERACT_CMD=%r resolved=%r version=%s",
+            configured,
+            resolved,
+            version,
+        )
+    else:
+        _startup_logger.warning(
+            "ocr.tesseract.startup TESSERACT_CMD=%r resolved=%r version=unavailable — %s",
+            configured,
+            resolved,
+            "Local Tesseract OCR engine is unavailable on this host.",
+        )
+
+
+@app.on_event("startup")
 def _log_photo_import_vision_sandbox_on_startup() -> None:
     s = get_settings()
     _startup_logger.info(
@@ -1398,6 +1422,7 @@ attach_acquisition_layer(app)
 attach_photo_import_layer(app)
 attach_intake_queue_layer(app)
 attach_p108_collections_layer(app)
+attach_ocr_health_ops_layer(app)
 attach_gpt_comic_read_layer(app)
 attach_catalog_universe_layer(app)
 attach_catalog_import_dashboard_layer(app)

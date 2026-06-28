@@ -8,6 +8,8 @@ from sqlalchemy import ColumnElement, false, or_, select
 from sqlmodel import Session, SQLModel
 
 import app.models as models
+from app.services.legacy_spine_availability import legacy_customer_order_table_exists
+
 from app.models import (
     CoverImage,
     DraftImport,
@@ -152,10 +154,12 @@ def _scalar_ids(session: Session, statement) -> tuple[int, ...]:
 
 def build_user_collection_scope(session: Session, *, user_id: int) -> UserCollectionScope:
     inventory_ids = _scalar_ids(session, select(InventoryCopy.id).where(InventoryCopy.user_id == user_id))
-    order_ids = _scalar_ids(session, select(Order.id).where(Order.user_id == user_id))
+    order_ids: tuple[int, ...] = ()
     order_item_ids: tuple[int, ...] = ()
-    if order_ids:
-        order_item_ids = _scalar_ids(session, select(OrderItem.id).where(OrderItem.order_id.in_(order_ids)))
+    if legacy_customer_order_table_exists(session):
+        order_ids = _scalar_ids(session, select(Order.id).where(Order.user_id == user_id))
+        if order_ids:
+            order_item_ids = _scalar_ids(session, select(OrderItem.id).where(OrderItem.order_id.in_(order_ids)))
     draft_import_ids = _scalar_ids(session, select(DraftImport.id).where(DraftImport.user_id == user_id))
     portfolio_ids = _scalar_ids(session, select(Portfolio.id).where(Portfolio.owner_user_id == user_id))
     receiving_session_ids = _scalar_ids(
