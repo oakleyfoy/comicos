@@ -16,6 +16,7 @@ from fastapi import HTTPException, UploadFile, status
 from sqlmodel import Session, func, select
 
 from app.models import Acquisition, CatalogIssue
+from app.models.catalog_master import CatalogUpc
 from app.models.acquisition import ACQUISITION_TYPE_OTHER
 from app.models.intake_queue import (
     INTAKE_SESSION_ACTIVE,
@@ -387,6 +388,18 @@ def _log_user_fingerprint_resolution(
         logger.debug("intake.fingerprint.user_resolution_skip item_id=%s", item.id, exc_info=True)
 
 
+def _intake_barcode_attach_trusted(session: Session, *, item: IntakeSessionItem) -> bool:
+    """True when catalog_upc already maps this barcode to the selected issue (skip re-validation)."""
+    if item.match_source != MATCH_SOURCE_CATALOG_UPC:
+        return False
+    if not item.normalized_barcode or item.selected_catalog_issue_id is None:
+        return False
+    upc = session.exec(
+        select(CatalogUpc).where(CatalogUpc.normalized_upc == item.normalized_barcode)
+    ).first()
+    return upc is not None and int(upc.issue_id or 0) == int(item.selected_catalog_issue_id)
+
+
 def _attach_intake_barcode_repair(
     session: Session,
     *,
@@ -396,6 +409,7 @@ def _attach_intake_barcode_repair(
     user_id: int,
     learned_source: str,
     catalog_upc_source: str = CATALOG_UPC_SOURCE_MANUAL,
+    require_catalog_validation: bool = True,
 ) -> None:
     """Learn barcode + optional catalog_upc after user confirms the correct issue."""
     if not item.normalized_barcode:
@@ -409,7 +423,7 @@ def _attach_intake_barcode_repair(
             user_id=user_id,
             learned_source=learned_source,
             catalog_upc_source=catalog_upc_source,
-            require_catalog_validation=True,
+            require_catalog_validation=require_catalog_validation,
         )
     except BarcodeAttachConflict as exc:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
@@ -856,7 +870,7 @@ def add_intake_item_to_inventory(
         acquisition=acquisition,
         catalog_issue_id=int(item.selected_catalog_issue_id),
         catalog_variant_id=item.selected_variant_id,
-        series_id=int(issue.series_id),
+        series_id=int(issue.series_id) if issue.series_id is not None else None,
         issue_number=str(issue.issue_number or ""),
         received_via="INTAKE_SCAN",
         received_at=utc_now(),
@@ -865,6 +879,7 @@ def add_intake_item_to_inventory(
     recompute_actual_book_count(session, acquisition)
     session.add(acquisition)
 
+    trusted_catalog_upc = _intake_barcode_attach_trusted(session, item=item)
     _attach_intake_barcode_repair(
         session,
         item=item,
@@ -872,6 +887,7 @@ def add_intake_item_to_inventory(
         variant_id=item.selected_variant_id,
         user_id=owner_user_id,
         learned_source=intake_repair_learned_source(item.match_source),
+        require_catalog_validation=not trusted_catalog_upc,
     )
 
     item.status = ITEM_ADDED_TO_INVENTORY
@@ -900,12 +916,20 @@ def add_all_high_confidence(session: Session, *, token: str, owner_user_id: int)
         )
     ).all()
     added = 0
+    skipped: list[str] = []
     for item in items:
         if item.selected_catalog_issue_id is None:
             continue
         try:
             add_intake_item_to_inventory(session, item_id=int(item.id or 0), owner_user_id=owner_user_id)
             added += 1
-        except HTTPException:
-            logger.warning("intake.add_all skipped item_id=%s", item.id)
-    return {"added": added, "candidates": len(items)}
+        except HTTPException as exc:
+            session.rollback()
+            detail = exc.detail if isinstance(exc.detail, str) else str(exc.detail)
+            skipped.append(detail)
+            logger.warning("intake.add_all skipped item_id=%s detail=%s", item.id, detail)
+        except Exception:
+            session.rollback()
+            logger.exception("intake.add_all failed item_id=%s", item.id)
+            skipped.append(f"Item {item.id} could not be added.")
+    return {"added": added, "candidates": len(items), "skipped": skipped}

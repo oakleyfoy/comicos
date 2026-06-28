@@ -506,3 +506,83 @@ def test_worker_duplicate_upc_conflict_needs_review(tmp_path, monkeypatch: pytes
         assert result == ITEM_NEEDS_REVIEW
         session.refresh(item)
         assert "conflict" in (item.reason or "").lower()
+
+
+def test_add_all_high_confidence_after_partial_attach_failure() -> None:
+    """Rollback between items so one attach failure does not 500 the batch."""
+    from app.models import Acquisition, InventoryCopy
+    from app.models.acquisition import ACQUISITION_TYPE_OTHER
+
+    BLACKS = "85647000817200911"
+    WILD = "70985304155900511"
+
+    engine = _engine()
+    with Session(engine) as session:
+        _seed_user(session)
+        pub_ahoy = CatalogPublisher(name="AHOY Comics", normalized_name="ahoy comics")
+        session.add(pub_ahoy)
+        session.commit()
+        series_bm = CatalogSeries(name="Black's Myth", normalized_name="blacks myth", publisher_id=int(pub_ahoy.id))
+        session.add(series_bm)
+        session.commit()
+        issue_bm = CatalogIssue(
+            series_id=int(series_bm.id),
+            publisher_id=int(pub_ahoy.id),
+            issue_number="4",
+            normalized_issue_number="4",
+            cover_date=date(2023, 1, 1),
+        )
+        session.add(issue_bm)
+        pub_img = CatalogPublisher(name="Image", normalized_name="image")
+        session.add(pub_img)
+        session.commit()
+        series_wc = CatalogSeries(name="Wildcore", normalized_name="wildcore", publisher_id=int(pub_img.id))
+        session.add(series_wc)
+        session.commit()
+        issue_wc = CatalogIssue(
+            series_id=int(series_wc.id),
+            publisher_id=int(pub_img.id),
+            issue_number="5",
+            normalized_issue_number="5",
+            cover_date=date(1998, 1, 1),
+        )
+        session.add(issue_wc)
+        session.commit()
+        session.add(
+            CatalogUpc(upc=BLACKS, normalized_upc=BLACKS, issue_id=int(issue_bm.id), source="test")
+        )
+        session.add(CatalogUpc(upc=WILD, normalized_upc=WILD, issue_id=int(issue_wc.id), source="test"))
+        session.commit()
+
+        acq = Acquisition(user_id=1, acquisition_type=ACQUISITION_TYPE_OTHER)
+        session.add(acq)
+        session.commit()
+        intake = IntakeSession(
+            user_id=1,
+            session_token="add-all-tok",
+            status="active",
+            acquisition_id=int(acq.id),
+            expires_at=datetime(2099, 1, 1, tzinfo=timezone.utc),
+        )
+        session.add(intake)
+        session.commit()
+        session.refresh(intake)
+
+        for barcode, issue_id in ((BLACKS, int(issue_bm.id)), (WILD, int(issue_wc.id))):
+            session.add(
+                IntakeSessionItem(
+                    session_id=int(intake.id),
+                    user_id=1,
+                    storage_path="scan.jpg",
+                    status=ITEM_AUTO_MATCHED,
+                    normalized_barcode=barcode,
+                    selected_catalog_issue_id=issue_id,
+                    match_source=MATCH_SOURCE_CATALOG_UPC,
+                )
+            )
+        session.commit()
+
+        result = svc.add_all_high_confidence(session, token="add-all-tok", owner_user_id=1)
+        assert result["added"] == 2
+        copies = session.exec(select(InventoryCopy)).all()
+        assert len(copies) == 2

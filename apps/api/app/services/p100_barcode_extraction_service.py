@@ -137,6 +137,155 @@ def _local_decode(image_bytes: bytes) -> dict[str, Any]:
     }
 
 
+def _vision_crop_bytes(image_bytes: bytes, *, wide_crop: bool) -> tuple[bytes, str]:
+    if wide_crop:
+        crop_bytes = crop_barcode_primary_bytes(image_bytes)
+        crop_used = "barcode_primary_wide"
+    else:
+        crop_bytes = crop_upc_region_bytes(image_bytes)
+        crop_used = "bottom_left" if crop_bytes != image_bytes else "full"
+    try:
+        from PIL import Image
+
+        with Image.open(io.BytesIO(image_bytes)) as img:
+            w, h = img.size
+            if w / max(h, 1) >= 2.0:
+                return image_bytes, "barcode_strip_full"
+    except Exception:  # noqa: BLE001
+        pass
+    return crop_bytes, crop_used
+
+
+def _gcd_supplement_options(main_upc: str) -> list[str]:
+    from app.core.config import get_settings
+
+    main = normalize_upc(main_upc)
+    if len(main) != 12:
+        return []
+    gcd_path = get_settings().gcd_sqlite_path
+    if not gcd_path.is_file():
+        return []
+    import sqlite3
+
+    supplements: set[str] = set()
+    conn = sqlite3.connect(gcd_path)
+    try:
+        rows = conn.execute(
+            """
+            SELECT barcode FROM gcd_issue
+            WHERE barcode IS NOT NULL AND barcode LIKE ?
+            """,
+            (f"{main}%",),
+        ).fetchall()
+        for (raw,) in rows:
+            digits = normalize_upc(str(raw or ""))
+            if digits.startswith(main) and len(digits) >= 17:
+                supplements.add(digits[12:17])
+    finally:
+        conn.close()
+    return sorted(supplements)[:12]
+
+
+def _gpt_supplement_fallback(
+    image_bytes: bytes,
+    *,
+    main_upc: str,
+    log_context: str,
+) -> str:
+    from app.core.config import get_settings
+    from app.services.gpt_comic_identification_prompts import (
+        COMIC_SUPPLEMENT_FOCUS_SYSTEM,
+        COMIC_SUPPLEMENT_FOCUS_USER,
+    )
+    from app.services.gpt_comic_vision_client import call_comic_vision
+
+    settings = get_settings()
+    if not settings.openai_api_key:
+        return ""
+    crop_bytes, _crop = _vision_crop_bytes(image_bytes, wide_crop=True)
+    model = settings.photo_import_barcode_read_model or "gpt-4o"
+    timeout_seconds = float(settings.photo_import_barcode_read_timeout_seconds or 45.0)
+    user = COMIC_SUPPLEMENT_FOCUS_USER.format(main_upc=main_upc)
+    options = _gcd_supplement_options(main_upc)
+    if options:
+        user = (
+            f"{user} Choose exactly one of these catalog supplements if visible: "
+            f"{', '.join(options)}."
+        )
+    try:
+        parsed, _payload, _raw, _model = call_comic_vision(
+            crop_bytes,
+            model=model,
+            api_key=settings.openai_api_key,
+            log_context=f"{log_context}:supplement",
+            system=COMIC_SUPPLEMENT_FOCUS_SYSTEM,
+            user=user,
+            image_detail="high",
+            max_image_side_px=2048,
+            timeout_seconds=timeout_seconds,
+        )
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("p100.barcode_extraction.gpt_supplement_fail error=%s", exc)
+        return ""
+    supp = re.sub(r"\D", "", str(parsed.get("supplement") or ""))
+    if len(supp) == 5:
+        if options and supp not in options:
+            logger.warning(
+                "p100.barcode_extraction.gpt_supplement_not_in_catalog main=%s supplement=%s",
+                main_upc,
+                supp,
+            )
+            return ""
+        return supp
+    if 3 <= len(supp) <= 4:
+        return supp.zfill(5)
+    return ""
+
+
+def _merge_gpt_main_and_supplement(
+    image_bytes: bytes,
+    *,
+    main_code: str,
+    log_context: str,
+    base_result: dict[str, Any],
+) -> dict[str, Any]:
+    main_norm = normalize_upc(main_code)
+    if len(main_norm) != 12 or not direct_market_requires_supplement_key(main_norm):
+        return base_result
+    supplement = _gpt_supplement_fallback(image_bytes, main_upc=main_norm, log_context=log_context)
+    if len(supplement) != 5:
+        return base_result
+    merged = merge_comic_upc_decodes([main_norm, supplement])
+    merged_norm = normalize_upc(merged or "")
+    if len(merged_norm) < 17:
+        return base_result
+    try:
+        from app.core.config import get_settings
+        from app.services.gcd_barcode_search_service import find_gcd_rows_by_normalized_barcode
+
+        gcd_path = get_settings().gcd_sqlite_path
+        if gcd_path.is_file() and not find_gcd_rows_by_normalized_barcode(gcd_path, merged_norm):
+            logger.warning(
+                "p100.barcode_extraction.gpt_supplement_rejected main=%s supplement=%s full=%s (no GCD hit)",
+                main_norm,
+                supplement,
+                merged_norm,
+            )
+            return base_result
+    except Exception:  # noqa: BLE001
+        logger.debug("p100.barcode_extraction.gpt_supplement_gcd_check_skipped", exc_info=True)
+    logger.info(
+        "p100.barcode_extraction.gpt_supplement_merged main=%s supplement=%s full=%s",
+        main_norm,
+        supplement,
+        merged_norm,
+    )
+    out = dict(base_result)
+    out["barcode"] = merged_norm
+    out["method"] = "gpt_barcode_read+supplement"
+    return out
+
+
 def _gpt_barcode_fallback(
     image_bytes: bytes,
     *,
@@ -156,8 +305,7 @@ def _gpt_barcode_fallback(
         logger.info("p100.barcode_extraction.gpt_fallback_skip reason=no_openai_key")
         return _empty_result(error="gpt_unconfigured")
 
-    crop_bytes = crop_barcode_primary_bytes(image_bytes) if wide_crop else crop_upc_region_bytes(image_bytes)
-    crop_used = "barcode_primary_wide" if wide_crop else ("bottom_left" if crop_bytes != image_bytes else "full")
+    crop_bytes, crop_used = _vision_crop_bytes(image_bytes, wide_crop=wide_crop)
     model = settings.photo_import_barcode_read_model or "gpt-4o"
     timeout_seconds = float(settings.photo_import_barcode_read_timeout_seconds or 45.0)
     logger.info("p100.barcode_extraction.gpt_fallback crop=%s model=%s timeout=%.0f", crop_used, model, timeout_seconds)
@@ -184,7 +332,7 @@ def _gpt_barcode_fallback(
         return _empty_result(error="gpt_barcode_rejected")
 
     logger.info("p100.barcode_extraction.gpt_fallback_success barcode=%s conf=%.2f", code, conf)
-    return {
+    result = {
         "barcode": code,
         "barcode_type": "upc_a",
         "confidence": float(conf),
@@ -192,6 +340,12 @@ def _gpt_barcode_fallback(
         "crop_used": crop_used,
         "error": None,
     }
+    return _merge_gpt_main_and_supplement(
+        image_bytes,
+        main_code=code,
+        log_context=log_context,
+        base_result=result,
+    )
 
 
 def _normalized_extracted_barcode(raw: str | None) -> str:
@@ -220,10 +374,19 @@ def extract_barcode_from_image(
     if allow_gpt_fallback and (not local_code or needs_supplement):
         gpt = _gpt_barcode_fallback(image_bytes, log_context=log_context, wide_crop=True)
         gpt_code = _normalized_extracted_barcode(gpt.get("barcode"))
+        if gpt_code and len(normalize_upc(gpt_code)) >= 17:
+            return gpt
         if gpt_code and (not needs_supplement or not direct_market_requires_supplement_key(gpt_code)):
             return gpt
-        if gpt_code and len(gpt_code) >= 17:
-            return gpt
+        if gpt_code and direct_market_requires_supplement_key(gpt_code):
+            merged = _merge_gpt_main_and_supplement(
+                image_bytes,
+                main_code=gpt_code,
+                log_context=log_context,
+                base_result=gpt,
+            )
+            if len(normalize_upc(merged.get("barcode") or "")) >= 17:
+                return merged
 
     if local.get("barcode"):
         return local

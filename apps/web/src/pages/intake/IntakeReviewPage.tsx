@@ -242,8 +242,15 @@ export function IntakeReviewPage(): JSX.Element {
   const onAddAll = async () => {
     setError(null);
     try {
-      await addAllHighConfidence(token);
+      const result = await addAllHighConfidence(token);
       await load();
+      if (result.skipped?.length) {
+        const msg =
+          result.added > 0
+            ? `Added ${result.added}; ${result.skipped.length} skipped: ${result.skipped[0]}`
+            : result.skipped.join(" ");
+        setError(msg);
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Add all failed");
     }

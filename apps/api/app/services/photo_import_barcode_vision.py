@@ -44,6 +44,8 @@ def crop_barcode_primary_bytes(image_bytes: bytes) -> bytes:
         with Image.open(io.BytesIO(image_bytes)) as img:
             img = img.convert("RGB")
             w, h = img.size
+            if w / max(h, 1) >= 2.0:
+                return image_bytes
             top = max(0, int(h * 0.35))
             crop = img.crop((0, top, w, h))
             cw, ch = crop.size

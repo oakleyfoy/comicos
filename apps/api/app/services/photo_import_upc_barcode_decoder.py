@@ -142,11 +142,22 @@ def collect_raw_upc_candidates_from_pil(pil: Image.Image) -> list[str]:
     if opencv_fn is None and pyzbar_fn is None:
         return []
     candidates: list[str] = []
-    for processed in _preprocess_pil_variants(pil):
-        if opencv_fn is not None:
-            candidates.extend(opencv_fn(_bgr_from_pil(processed)))
-        if pyzbar_fn is not None:
-            candidates.extend(pyzbar_fn(processed))
+    w, h = pil.size
+    scales = [1.0]
+    if max(w, h) < 500 or h < 360:
+        scales.extend([2.0, 3.0])
+    for scale in scales:
+        source = pil
+        if scale != 1.0:
+            source = pil.resize(
+                (max(1, int(w * scale)), max(1, int(h * scale))),
+                Image.Resampling.LANCZOS,
+            )
+        for processed in _preprocess_pil_variants(source):
+            if opencv_fn is not None:
+                candidates.extend(opencv_fn(_bgr_from_pil(processed)))
+            if pyzbar_fn is not None:
+                candidates.extend(pyzbar_fn(processed))
     return candidates
 
 

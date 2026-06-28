@@ -120,6 +120,19 @@ COMIC_BARCODE_FOCUS_USER = (
 )
 
 
+COMIC_SUPPLEMENT_FOCUS_SYSTEM = (
+    "You read ONLY the small 5-digit supplemental issue code on a US direct-market comic UPC label "
+    "(printed as human-readable digits, often to the LEFT of the main UPC bars, sometimes above a "
+    "second small barcode). The 12-digit main UPC is already known — do NOT repeat it. "
+    'Return JSON only: {"supplement":"","confidence":0}. '
+    "supplement must be exactly 5 digits or empty. Never guess."
+)
+
+COMIC_SUPPLEMENT_FOCUS_USER = (
+    "The main UPC is {main_upc}. Read only the 5-digit supplement code printed on this label."
+)
+
+
 def build_issue_focus_user(series: str, publisher: str = "") -> str:
     series_label = series.strip() or "this comic"
     publisher_label = publisher.strip()

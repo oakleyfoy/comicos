@@ -94,6 +94,9 @@ def split_barcode_box_regions(
 
 # Minimum acceptable printed-supplement crop size (px). Below this OCR is hopeless.
 MIN_LEFT_SUPPLEMENT_PX = 40
+# Wide, short captures that are mostly a price-box / barcode strip (not a full cover).
+BARCODE_STRIP_MIN_ASPECT = 2.0
+BARCODE_STRIP_MIN_HEIGHT_PX = 80
 # A normal phone photo of a full cover is far larger than this on its long edge.
 MIN_SANE_IMAGE_LONG_EDGE_PX = 200
 # Cap the detection image size for speed; coords are mapped back to original.
@@ -415,6 +418,13 @@ def _detect_price_box(pil_roi: Image.Image) -> PriceBoxDetectionDiagnostics:
         return diag
 
 
+def is_likely_barcode_strip(width: int, height: int) -> bool:
+    """True when the frame is a wide barcode/price-box photo rather than a full cover."""
+    if height < BARCODE_STRIP_MIN_HEIGHT_PX:
+        return False
+    return width / max(height, 1) >= BARCODE_STRIP_MIN_ASPECT
+
+
 def _splits_from_base(base: Box, width: int, height: int) -> dict[str, Box]:
     bl, bt, br, bb = base
     bw = max(1, br - bl)
@@ -482,11 +492,22 @@ def compute_barcode_region_geometry(
 
     if bounds.box is None:
         fallback_reason = FALLBACK_BARCODE_NOT_DETECTED
-        notes.append("UPC bar strip not detected — supplement OCR disabled (no percentage crop).")
-        splits = _splits_from_base(fe, w, h)
-        main_bars = splits["main_bars"]
-        left_supplement = splits["left_supplement"]
-        right_cover_digit = splits["right_cover_digit"]
+        if is_likely_barcode_strip(w, h):
+            fe = (0, 0, w, h)
+            splits = _splits_from_base(fe, w, h)
+            main_bars = splits["main_bars"]
+            left_supplement = splits["left_supplement"]
+            right_cover_digit = splits["right_cover_digit"]
+            notes.append("barcode strip layout — using full-frame region splits for supplement OCR.")
+            if _box_w(left_supplement) >= min_region_px and _box_h(left_supplement) >= min_region_px:
+                supplement_ocr_allowed = not input_too_small
+                fallback_reason = ""
+        else:
+            notes.append("UPC bar strip not detected — supplement OCR disabled (no percentage crop).")
+            splits = _splits_from_base(fe, w, h)
+            main_bars = splits["main_bars"]
+            left_supplement = splits["left_supplement"]
+            right_cover_digit = splits["right_cover_digit"]
     else:
         barcode = bounds.box
         left_supplement = compute_supplement_box_from_barcode(barcode, w, h)
@@ -527,7 +548,12 @@ def compute_barcode_region_geometry(
     )
 
     ls = geometry.left_supplement
-    if bounds.box is None:
+    if bounds.box is None and not is_likely_barcode_strip(w, h):
+        geometry.geometry_failed = True
+        geometry.supplement_ocr_allowed = False
+    elif bounds.box is None and is_likely_barcode_strip(w, h) and supplement_ocr_allowed:
+        geometry.geometry_failed = False
+    elif bounds.box is None:
         geometry.geometry_failed = True
         geometry.supplement_ocr_allowed = False
     elif _box_w(ls) < min_region_px or _box_h(ls) < min_region_px:

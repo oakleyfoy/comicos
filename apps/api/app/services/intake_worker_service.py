@@ -55,6 +55,7 @@ from app.services.catalog_ingestion_service import (
     direct_market_requires_supplement_key,
     merge_comic_upc_decodes,
     normalize_upc,
+    upc_check_digit_valid,
 )
 from app.services.intake_barcode_confidence import (
     barcode_catalog_identity_conflict,
@@ -83,7 +84,10 @@ from app.services.intake_scanner_barcode_authority_service import (
     sync_intake_display_from_p106_gap,
     try_resolve_seventeen_digit_barcode_from_p105,
 )
-from app.services.photo_import_upc_barcode_decoder import collect_raw_upc_candidates_from_pil
+from app.services.photo_import_upc_barcode_decoder import (
+    collect_raw_upc_candidates_from_pil,
+    decode_upc_from_image_bytes,
+)
 from app.services.photo_import_fingerprint_service import (
     fingerprint_match_score_for_crop_path,
     search_catalog_fingerprint_hits_for_crop_path,
@@ -339,11 +343,58 @@ def _gcd_has_exact_barcode_authority(gcd_path: Path, normalized: str) -> bool:
     return bool(find_gcd_rows_by_normalized_barcode(gcd_path, lookup_key))
 
 
+def _intake_supplement_frame_bytes(*, image_path: Path) -> list[bytes]:
+    """Extra JPEG frames captured after barcode detect (``{stem}_f0.jpg``, …)."""
+    frames: list[bytes] = []
+    for path in sorted(image_path.parent.glob(f"{image_path.stem}_f*.jpg")):
+        if not path.is_file():
+            continue
+        try:
+            frames.append(path.read_bytes())
+        except OSError:
+            logger.debug("intake.barcode.supplement_frame_read_failed path=%s", path, exc_info=True)
+    return frames
+
+
+def _merge_seventeen_digit_from_image_frames(*, main: str, frame_bytes_list: list[bytes]) -> str | None:
+    """Merge 12-digit main UPC with EAN-5 / supplement strings from one or more photos."""
+    main_norm = normalize_upc(main)
+    if len(main_norm) != 12:
+        return None
+    candidates: list[str] = [main_norm]
+    try:
+        import io as io_mod
+
+        from PIL import Image
+    except ImportError:
+        Image = None  # type: ignore[misc, assignment]
+
+    for fb in frame_bytes_list:
+        if not fb:
+            continue
+        decoded = decode_upc_from_image_bytes(fb)
+        if decoded:
+            candidates.append(decoded[0])
+        if Image is None:
+            continue
+        try:
+            with Image.open(io_mod.BytesIO(fb)) as img:
+                candidates.extend(collect_raw_upc_candidates_from_pil(img.convert("RGB")))
+        except Exception:
+            logger.debug("intake.barcode.frame_candidate_collect_failed", exc_info=True)
+    merged = merge_comic_upc_decodes(candidates)
+    merged_norm = normalize_upc(merged or "")
+    if len(merged_norm) >= 17 and merged_norm.startswith(main_norm):
+        return merged_norm[:17]
+    return None
+
+
 def _recover_seventeen_digit_barcode(
     *,
     normalized: str,
     p105: Any,
     image_bytes: bytes,
+    supplement_frame_bytes: list[bytes] | None = None,
 ) -> str | None:
     recovered = try_resolve_seventeen_digit_barcode_from_p105(normalized=normalized, p105=p105)
     if recovered:
@@ -351,20 +402,13 @@ def _recover_seventeen_digit_barcode(
     main = normalize_upc(p105.main_upc or normalized)
     if len(main) != 12:
         return None
-    try:
-        import io as io_mod
-
-        from PIL import Image
-
-        with Image.open(io_mod.BytesIO(image_bytes)) as img:
-            pil = img.convert("RGB")
-        merged = merge_comic_upc_decodes([main, *collect_raw_upc_candidates_from_pil(pil)])
-    except Exception:
-        logger.debug("intake.barcode.full_image_merge_failed", exc_info=True)
-        return None
-    merged_norm = normalize_upc(merged or "")
-    if len(merged_norm) >= 17 and merged_norm.startswith(main):
-        return merged_norm[:17]
+    frames: list[bytes] = [image_bytes]
+    for fb in supplement_frame_bytes or []:
+        if fb and fb not in frames:
+            frames.append(fb)
+    merged_from_frames = _merge_seventeen_digit_from_image_frames(main=main, frame_bytes_list=frames)
+    if merged_from_frames:
+        return merged_from_frames
     return None
 
 
@@ -483,17 +527,18 @@ def process_intake_item(session: Session, *, item_id: int) -> str:
             # Never run barcode OCR / fingerprint matching on thumbnail-sized input.
             return _finish(session, item, status=ITEM_FAILED, reason=small_reason)
 
+        supplement_frame_bytes = _intake_supplement_frame_bytes(image_path=abs_path)
+        known_main = normalize_upc(item.raw_barcode or item.normalized_barcode or "")
+        if len(known_main) != 12 or not upc_check_digit_valid(known_main):
+            known_main = ""
         p105 = read_comic_barcode_from_image_bytes(
             image_bytes,
             session=session,
             cover_path=abs_path,
             intake_item_id=item_id,
             log_context=f"intake item_id={item_id}",
-            supplement_frame_bytes=[
-                p.read_bytes()
-                for p in sorted(abs_path.parent.glob(f"{abs_path.stem}_f*.jpg"))
-                if p.is_file()
-            ],
+            supplement_frame_bytes=supplement_frame_bytes,
+            known_main_upc=known_main or None,
         )
         item.barcode_read_json = p105.to_json()
 
@@ -543,6 +588,7 @@ def process_intake_item(session: Session, *, item_id: int) -> str:
             normalized=normalized,
             p105=p105,
             image_bytes=image_bytes,
+            supplement_frame_bytes=supplement_frame_bytes,
         )
         if recovered_full and len(normalize_upc(normalized)) < 17:
             scan_validation = validate_single_barcode_read(recovered_full)
@@ -557,14 +603,35 @@ def process_intake_item(session: Session, *, item_id: int) -> str:
                 )
 
         if comic_barcode_scan_is_partial(normalized=normalized, p105=p105):
-            trace.partial_barcode = True
-            item.barcode_read_json = mark_partial_barcode_in_read_json(item.barcode_read_json)
-            return _finish(
-                session,
-                item,
-                status=ITEM_NEEDS_REVIEW,
-                reason=PARTIAL_BARCODE_REASON,
+            extraction = extract_barcode_from_image(
+                image_bytes,
+                allow_gpt_fallback=True,
+                log_context=f"intake item_id={item_id} partial_gpt",
             )
+            gpt_code = (extraction.get("barcode") or "").strip()
+            gpt_norm = normalize_upc(gpt_code)
+            if len(gpt_norm) >= 17 and gpt_norm.startswith(normalize_upc(normalized)[:12]):
+                scan_validation = validate_single_barcode_read(gpt_norm)
+                if scan_validation.acceptance != "rejected_checksum":
+                    normalized = scan_validation.normalized or gpt_norm[:64]
+                    _apply_recovered_barcode_to_item(item, normalized=normalized)
+                    trace.normalized_barcode = normalized
+                    item.barcode_read_json = p105.to_json()
+                    logger.info(
+                        "intake.item.barcode_gpt_recovered item_id=%s normalized=%s method=%s",
+                        item_id,
+                        normalized,
+                        extraction.get("method"),
+                    )
+            if comic_barcode_scan_is_partial(normalized=normalized, p105=p105):
+                trace.partial_barcode = True
+                item.barcode_read_json = mark_partial_barcode_in_read_json(item.barcode_read_json)
+                return _finish(
+                    session,
+                    item,
+                    status=ITEM_NEEDS_REVIEW,
+                    reason=PARTIAL_BARCODE_REASON,
+                )
 
         from app.services.gcd_catalog_import_dashboard_service import resolve_gcd_path
 

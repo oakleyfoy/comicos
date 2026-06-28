@@ -36,6 +36,7 @@ from app.services.p105_comic_barcode_regions import (
     compute_barcode_region_geometry,
     crops_from_geometry,
     draw_region_overlay,
+    is_likely_barcode_strip,
     pil_to_jpeg_bytes,
     save_barcode_region_debug_to_dir,
 )
@@ -605,6 +606,7 @@ def read_comic_barcode_from_image_bytes(
     debug_dir: Path | None = None,
     log_context: str = "p105_comic_barcode",
     supplement_frame_bytes: list[bytes] | None = None,
+    known_main_upc: str | None = None,
 ) -> ComicBarcodeReadResult:
     """Decode main UPC from bars; OCR-retry the printed left supplement; reconstruct full barcode."""
     import io as io_mod
@@ -616,9 +618,27 @@ def read_comic_barcode_from_image_bytes(
     geometry = compute_barcode_region_geometry(pil, config=config)
     regions = crops_from_geometry(pil, geometry)
 
+    strip_layout = is_likely_barcode_strip(pil.size[0], pil.size[1])
     main_upc, conf_main = _decode_main_upc_from_pil(regions["main_bars"])
     if not main_upc:
         main_upc, conf_main = _decode_main_upc_from_pil(regions["full_expanded"])
+    if not main_upc and strip_layout:
+        main_upc, conf_main = _decode_main_upc_from_pil(pil)
+
+    known_main = normalize_upc(known_main_upc or "")
+    if len(known_main) == 12 and upc_check_digit_valid(known_main):
+        if not main_upc:
+            main_upc = known_main
+            conf_main = max(conf_main, 0.88)
+        elif normalize_upc(main_upc) != known_main:
+            logger.info(
+                "p105.known_main_override item=%s decoded=%s known=%s",
+                intake_item_id or log_context,
+                main_upc,
+                known_main,
+            )
+            main_upc = known_main
+            conf_main = max(conf_main, 0.88)
 
     addon = decode_upc_addon(pil, geometry, main_upc=main_upc) if main_upc else UpAddonDecodeResult()
     decoded_supplement = addon.supplement
@@ -649,6 +669,8 @@ def read_comic_barcode_from_image_bytes(
     run_ocr = geometry.supplement_ocr_allowed or (
         bool(main_upc_digits) and len(main_upc_digits) == 12 and missing_supplement
     )
+    if strip_layout and main_upc_digits and missing_supplement:
+        run_ocr = True
     run_ocr_fallback = run_ocr and not decoded_supplement
     if run_ocr:
         vision_attempt = _vision_supplement_attempt(

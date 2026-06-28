@@ -120,3 +120,4 @@ class IntakeCatalogSearchResponse(BaseModel):
 class IntakeAddAllResponse(BaseModel):
     added: int
     candidates: int
+    skipped: list[str] = []

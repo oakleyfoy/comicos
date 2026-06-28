@@ -220,7 +220,9 @@ export function requeueIntakeItem(itemId: number): Promise<IntakeItem> {
   return requestIntake<IntakeItem>(`/api/v1/intake/items/${itemId}/requeue`, { method: "POST" });
 }
 
-export function addAllHighConfidence(token: string): Promise<{ added: number; candidates: number }> {
+export function addAllHighConfidence(
+  token: string,
+): Promise<{ added: number; candidates: number; skipped?: string[] }> {
   return requestIntake(`/api/v1/intake/sessions/${token}/add-all-high-confidence`, {
     method: "POST",
   });
