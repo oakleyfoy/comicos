@@ -1,0 +1,37 @@
+# Keep the Docker build context small and deterministic.
+# The Dockerfile copies only pyproject/README/app/alembic/scripts explicitly,
+# but excluding heavy/scratch paths speeds up the context upload on Render.
+
+# Local catalog cover assets (large, regenerated at runtime / not needed to build)
+data/
+
+# Python caches and build artifacts
+**/__pycache__/
+**/*.pyc
+**/*.pyo
+.pytest_cache/
+.ruff_cache/
+*.egg-info/
+build/
+dist/
+
+# Virtual envs
+.venv/
+venv/
+env/
+
+# Tests are not needed in the runtime image
+tests/
+
+# Decompiler / disassembly scratch + tooling captured during debugging
+_p106_*.py
+_p106_*.txt
+_p106_*.err
+_p107_*.py
+_p107_*.txt
+tools/pycdc/
+pytest_full_run_*.txt
+
+# Misc
+.DS_Store
+*.log

@@ -1,0 +1,82 @@
+# ComicOS API + Worker — Render Docker blueprint
+#
+# The repo root render.yaml only publishes the static frontend. The API and
+# worker are deployed as Docker services so the Tesseract OCR binary (required
+# by P106.1 cover recovery) is installed at build time — Render's native Python
+# runtime cannot apt-get system packages.
+#
+# Apply in Render Dashboard (New -> Blueprint) OR switch the existing API/worker
+# services to Docker runtime manually (see docs/RENDER_OCR_TESSERACT.md).
+
+services:
+  - type: web
+    name: comic-os-api
+    runtime: docker
+    rootDir: apps/api
+    dockerfilePath: apps/api/Dockerfile
+    dockerContext: apps/api
+    healthCheckPath: /health
+    # Default Dockerfile CMD already runs scripts/render_web_start.py
+    # (alembic upgrade head -> uvicorn). No dockerCommand override needed.
+    envVars:
+      - key: TESSERACT_CMD
+        value: /usr/bin/tesseract
+      - key: APP_ENV
+        value: production
+      - key: DATABASE_URL
+        sync: false
+      - key: REDIS_URL
+        sync: false
+      - key: SECRET_KEY
+        sync: false
+      - key: FRONTEND_URL
+        sync: false
+      - key: CORS_ORIGINS
+        sync: false
+      - key: GOOGLE_CLIENT_ID
+        sync: false
+      - key: GOOGLE_CLIENT_SECRET
+        sync: false
+      - key: GOOGLE_REDIRECT_URI
+        sync: false
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: OPS_ADMIN_EMAILS
+        sync: false
+      - key: ACCESS_TOKEN_EXPIRE_MINUTES
+        value: "60"
+
+  - type: worker
+    name: comic-os-worker
+    runtime: docker
+    rootDir: apps/api
+    dockerfilePath: apps/api/Dockerfile
+    dockerContext: apps/api
+    dockerCommand: python -m app.workers.rq_worker
+    envVars:
+      - key: TESSERACT_CMD
+        value: /usr/bin/tesseract
+      - key: APP_ENV
+        value: production
+      - key: DATABASE_URL
+        sync: false
+      - key: REDIS_URL
+        sync: false
+      - key: SECRET_KEY
+        sync: false
+      - key: FRONTEND_URL
+        sync: false
+      - key: CORS_ORIGINS
+        sync: false
+      - key: GOOGLE_CLIENT_ID
+        sync: false
+      - key: GOOGLE_CLIENT_SECRET
+        sync: false
+      - key: GOOGLE_REDIRECT_URI
+        sync: false
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: OPS_ADMIN_EMAILS
+        sync: false
+      - key: ACCESS_TOKEN_EXPIRE_MINUTES
+        value: "60"

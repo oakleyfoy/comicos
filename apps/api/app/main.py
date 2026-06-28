@@ -1390,6 +1390,18 @@ def _log_tesseract_on_startup() -> None:
             "Local Tesseract OCR engine is unavailable on this host.",
         )
 
+    from app.services.intake_runtime_selfcheck import (
+        collect_intake_runtime_report,
+        format_intake_runtime_line,
+    )
+
+    report = collect_intake_runtime_report()
+    line = format_intake_runtime_line(report)
+    if report["tesseract_available"] and report["opencv_available"] and report["zxing_available"]:
+        _startup_logger.info(line)
+    else:
+        _startup_logger.warning(line)
+
 
 @app.on_event("startup")
 def _log_photo_import_vision_sandbox_on_startup() -> None:
