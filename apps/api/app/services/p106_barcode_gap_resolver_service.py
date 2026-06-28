@@ -582,8 +582,9 @@ def resolve_barcode_gap(
     scanner_session_id: int | None = None,
     photo_import_id: int | None = None,
     intake_item_id: int | None = None,
+    diagnosis: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    diag = diagnose_barcode_gap(session, barcode=barcode, gcd_path=gcd_path, cache_path=cache_path)
+    diag = diagnosis or diagnose_barcode_gap(session, barcode=barcode, gcd_path=gcd_path, cache_path=cache_path)
     if diag.get("already_resolved"):
         return {"diagnosis": diag, "written": False, "result": diag.get("resolution")}
 

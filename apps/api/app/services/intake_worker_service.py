@@ -7,8 +7,9 @@ phone scanner never blocks. Identification order favors instant/high-confidence 
     2. Local catalog UPC table (``catalog_upc``).
     3. ComicVine on-demand lookup (needs review before inventory).
 
-Local catalog misses trigger P106 GCD barcode lookup before ComicVine. Unique exact GCD
-matches may auto-import/attach so the scanner never shows a blank identity.
+Local catalog misses trigger P106 GCD barcode lookup, then P106.1 metadata recovery when GCD
+has no barcode on file, then ComicVine. Unique exact GCD matches may auto-import/attach so the
+scanner never shows a blank identity.
 
 Every candidate is run through safe-match validation so we never auto-match the wrong book.
 """
@@ -798,6 +799,39 @@ def process_intake_item(session: Session, *, item_id: int) -> str:
                         exc_info=True,
                     )
 
+            if (
+                candidate is None
+                and _p106_reports_no_gcd_match(gap_diag)
+                and not _gcd_has_exact_barcode_authority(gcd_path, normalized)
+                and not p106_gap_is_exact_barcode_authority(gap_diag or {})
+            ):
+                from app.services.p106_1_gcd_non_barcode_recovery_service import (
+                    enrich_gap_diagnosis_with_gcd_non_barcode_recovery,
+                )
+
+                gap_diag = enrich_gap_diagnosis_with_gcd_non_barcode_recovery(
+                    session,
+                    item=item,
+                    barcode=normalized,
+                    gcd_path=gcd_path,
+                    cache_path=cache_path,
+                    image_path=abs_path,
+                    image_bytes=image_bytes,
+                    prior_diagnosis=gap_diag or {},
+                    p105=p105,
+                )
+                if gap_diag.get("recovery_stage") == "p106_1_non_barcode":
+                    trace.p106_called = True
+                    try:
+                        _apply_p106_diagnosis_to_intake_item(item, gap_diag=gap_diag)
+                    except Exception:
+                        logger.warning(
+                            "p106_1.non_barcode.display_failed item_id=%s barcode=%s",
+                            item_id,
+                            normalized,
+                            exc_info=True,
+                        )
+
             if gap_diag and AUTO_RESOLVE_UNIQUE_GCD_BARCODE_GAP and should_auto_resolve_barcode_gap_on_scan(gap_diag):
                 try:
                     resolve_outcome = resolve_barcode_gap(
@@ -807,6 +841,7 @@ def process_intake_item(session: Session, *, item_id: int) -> str:
                         cache_path=cache_path,
                         confirm_write=True,
                         intake_item_id=int(item.id or 0),
+                        diagnosis=gap_diag if gap_diag.get("ready_to_auto_import") else None,
                     )
                     trace.apply_p106_resolve_outcome(resolve_outcome)
                     result = resolve_outcome.get("result") or {}
