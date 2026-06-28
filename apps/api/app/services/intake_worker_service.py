@@ -822,6 +822,16 @@ def process_intake_item(session: Session, *, item_id: int) -> str:
                 )
                 if gap_diag.get("recovery_stage") == "p106_1_non_barcode":
                     trace.p106_called = True
+                    block = gap_diag.get("recovery_block_reason") or gap_diag.get("recovery_reason")
+                    if block:
+                        logger.info(
+                            "p106_1.intake_outcome item_id=%s barcode=%s ready=%s block=%s status=%s",
+                            item_id,
+                            normalized,
+                            gap_diag.get("ready_to_auto_import"),
+                            block,
+                            gap_diag.get("status"),
+                        )
                     try:
                         _apply_p106_diagnosis_to_intake_item(item, gap_diag=gap_diag)
                     except Exception:

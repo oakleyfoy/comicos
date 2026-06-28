@@ -19,9 +19,11 @@ from app.services.p106_1_gcd_non_barcode_recovery_service import (
     IntakeGcdRecoveryHints,
     P106_1_IMPORT_REASON,
     P106_1_RECOVERY_STAGE,
+    _score_candidate_breakdown,
     diagnose_gcd_non_barcode_recovery,
     enrich_gap_diagnosis_with_gcd_non_barcode_recovery,
     gather_intake_gcd_recovery_hints,
+    has_reliable_series_hint,
 )
 
 
@@ -285,3 +287,179 @@ def test_facsimile_ocr_boosts_facsimile_gcd_row(
     assert diag.get("ready_to_auto_import") is True
     assert diag.get("gcd_issue_id") == 88020
     assert diag.get("proposed_action") == "auto_import"
+
+
+def test_has_reliable_series_hint_rejects_blank_and_generic() -> None:
+    assert has_reliable_series_hint(None) is False
+    assert has_reliable_series_hint("") is False
+    assert has_reliable_series_hint("Marvel") is False
+    assert has_reliable_series_hint("Facsimile Edition") is False
+    assert has_reliable_series_hint("Amazing Spider-Man") is True
+
+
+def test_blank_series_hint_does_not_award_series_pts(session: Session, tmp_path: Path) -> None:
+    gcd_path = _gcd_db(
+        tmp_path,
+        rows=[
+            {
+                "gcd_issue_id": 88100,
+                "series": "X-Men",
+                "number": "1",
+                "barcode": None,
+                "title": "First issue",
+                "series_id": 1,
+            },
+            {
+                "gcd_issue_id": 88101,
+                "series": "Avengers",
+                "number": "1",
+                "barcode": None,
+                "title": "First issue",
+                "series_id": 2,
+            },
+        ],
+    )
+    hints = IntakeGcdRecoveryHints(
+        publisher="Marvel",
+        series=None,
+        issue_number="1",
+        year=2024,
+        ocr_title=None,
+        ocr_issue_number=None,
+        ocr_publisher=None,
+        series_norm_aliases=[],
+    )
+    rows = [
+        {"gcd_issue_id": 88100, "publisher": "Marvel", "series": "X-Men", "issue_number": "1", "title": "First issue", "pub_year": 2024},
+        {"gcd_issue_id": 88101, "publisher": "Marvel", "series": "Avengers", "issue_number": "1", "title": "First issue", "pub_year": 2024},
+    ]
+    for row in rows:
+        _, breakdown = _score_candidate_breakdown(session, row=row, hints=hints, image_path=None)
+        assert breakdown["series_pts"] == 0
+        assert breakdown["series_match_state"] == "unavailable"
+        assert breakdown["series_match_failed"] is None
+
+
+def test_broad_marvel_issue_one_pool_without_discriminators(session: Session, tmp_path: Path) -> None:
+    bc = "75960620629200111"
+    gcd_path = _gcd_db(
+        tmp_path,
+        rows=[
+            {"gcd_issue_id": 88110, "series": "X-Men", "number": "1", "barcode": None, "series_id": 1},
+            {"gcd_issue_id": 88111, "series": "Avengers", "number": "1", "barcode": None, "series_id": 2},
+        ],
+    )
+    hints = IntakeGcdRecoveryHints(
+        publisher="Marvel",
+        series=None,
+        issue_number="1",
+        year=2024,
+        ocr_title=None,
+        ocr_issue_number=None,
+        ocr_publisher=None,
+        series_norm_aliases=[],
+    )
+    diag = diagnose_gcd_non_barcode_recovery(
+        session,
+        barcode=bc,
+        gcd_path=gcd_path,
+        cache_path=None,
+        hints=hints,
+        image_path=None,
+        prior_diagnosis={"gcd_match_count": 0},
+    )
+    assert diag["ready_to_auto_import"] is False
+    assert diag["recovery_block_reason"] == "insufficient_series_or_title_hint"
+    assert diag["reason"] == "insufficient_series_or_title_hint"
+
+
+def test_reliable_series_filters_unrelated_marvel_issue_one(session: Session, tmp_path: Path) -> None:
+    bc = "75960620629200111"
+    gcd_path = _gcd_db(
+        tmp_path,
+        rows=[
+            {
+                "gcd_issue_id": 88120,
+                "series": "Amazing Spider-Man",
+                "number": "1",
+                "barcode": None,
+                "title": "Facsimile",
+                "notes": "facsimile",
+                "series_id": 1,
+            },
+            {"gcd_issue_id": 88121, "series": "X-Men", "number": "1", "barcode": None, "series_id": 2},
+        ],
+    )
+    hints = IntakeGcdRecoveryHints(
+        publisher="Marvel",
+        series="Amazing Spider-Man",
+        issue_number="1",
+        year=2024,
+        ocr_title=None,
+        ocr_issue_number=None,
+        ocr_publisher=None,
+        facsimile_or_reprint=True,
+        series_norm_aliases=["amazing spider man"],
+    )
+    diag = diagnose_gcd_non_barcode_recovery(
+        session,
+        barcode=bc,
+        gcd_path=gcd_path,
+        cache_path=None,
+        hints=hints,
+        image_path=None,
+        prior_diagnosis={"gcd_match_count": 0},
+    )
+    assert diag["ready_to_auto_import"] is True
+    assert diag["gcd_issue_id"] == 88120
+
+
+def test_reliable_series_clear_winner_among_compatible_variants(session: Session, tmp_path: Path) -> None:
+    bc = "75960620629200111"
+    gcd_path = _gcd_db(
+        tmp_path,
+        rows=[
+            {
+                "gcd_issue_id": 88130,
+                "series": "Amazing Spider-Man",
+                "number": "1",
+                "barcode": None,
+                "title": "Facsimile Edition",
+                "notes": "facsimile reprint",
+                "key_date": "2024-06-00",
+                "series_id": 1,
+            },
+            {
+                "gcd_issue_id": 88131,
+                "series": "Amazing Spider-Man",
+                "number": "1",
+                "barcode": None,
+                "title": "Regular",
+                "notes": "",
+                "key_date": "2024-06-00",
+                "series_id": 2,
+            },
+        ],
+    )
+    hints = IntakeGcdRecoveryHints(
+        publisher="Marvel",
+        series="Amazing Spider-Man",
+        issue_number="1",
+        year=2024,
+        ocr_title=None,
+        ocr_issue_number=None,
+        ocr_publisher=None,
+        facsimile_or_reprint=True,
+        series_norm_aliases=["amazing spider man"],
+    )
+    diag = diagnose_gcd_non_barcode_recovery(
+        session,
+        barcode=bc,
+        gcd_path=gcd_path,
+        cache_path=None,
+        hints=hints,
+        image_path=None,
+        prior_diagnosis={"gcd_match_count": 0},
+    )
+    assert diag["ready_to_auto_import"] is True
+    assert diag["gcd_issue_id"] == 88130

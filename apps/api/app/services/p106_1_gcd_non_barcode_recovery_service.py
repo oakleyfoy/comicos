@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import logging
 import re
 import sqlite3
@@ -44,6 +45,54 @@ _MIN_UNIQUE_SCORE = 10
 _SECOND_BEST_GAP = 3
 _FINGERPRINT_BOOST = 4
 _FINGERPRINT_MIN_CONFIDENCE = 0.82
+_GENERIC_SERIES_TOKENS = frozenset(
+    {
+        "marvel",
+        "comic",
+        "comics",
+        "issue",
+        "facsimile",
+        "variant",
+        "cover",
+        "edition",
+    }
+)
+_STRONG_SINGLE_SERIES_TOKENS = frozenset(
+    {
+        "spider",
+        "spiderman",
+        "batman",
+        "superman",
+        "wolverine",
+        "hulk",
+        "thor",
+        "daredevil",
+    }
+)
+SeriesMatchState = str  # matched | mismatched | unavailable
+
+
+def has_reliable_series_hint(series_hint: str | None) -> bool:
+    """True when the series/title hint is specific enough to filter GCD candidates."""
+    if series_hint is None or not str(series_hint).strip():
+        return False
+    norm = normalize_series_name(str(series_hint).strip())
+    if len(norm) < 4:
+        return False
+    if norm.isdigit():
+        return False
+    tokens = [t for t in norm.split() if t]
+    if not tokens:
+        return False
+    if all(t in _GENERIC_SERIES_TOKENS for t in tokens):
+        return False
+    if len(tokens) == 1:
+        token = tokens[0]
+        if token in _GENERIC_SERIES_TOKENS:
+            return False
+        if len(token) < 5 and token not in _STRONG_SINGLE_SERIES_TOKENS:
+            return False
+    return True
 
 
 @dataclass
@@ -249,23 +298,148 @@ def _publisher_matches(hint: str | None, candidate: str | None) -> bool:
     return series_names_compatible(a, b)
 
 
-def _series_matches(hints: IntakeGcdRecoveryHints, row: dict[str, Any]) -> bool:
-    if not hints.series_norm_aliases:
+def _series_match_evaluation(
+    hints: IntakeGcdRecoveryHints,
+    row: dict[str, Any],
+) -> tuple[SeriesMatchState, float, dict[str, Any]]:
+    raw_series_hint = hints.series
+    normalized_series_hint = normalize_series_name(raw_series_hint) if raw_series_hint else ""
+    candidate_series_normalized = normalize_series_name(str(row.get("series") or ""))
+    series_hint_reliable = has_reliable_series_hint(raw_series_hint)
+    meta = {
+        "raw_series_hint": raw_series_hint,
+        "normalized_series_hint": normalized_series_hint or None,
+        "series_hint_reliable": series_hint_reliable,
+        "candidate_series_normalized": candidate_series_normalized or None,
+        "series_similarity": 0.0,
+        "series_match_state": "unavailable",
+    }
+    if not series_hint_reliable:
+        return "unavailable", 0.0, meta
+    aliases = hints.series_norm_aliases or ([normalized_series_hint] if normalized_series_hint else [])
+    for alias in aliases:
+        if not alias:
+            continue
+        if candidate_series_normalized == alias or series_names_compatible(candidate_series_normalized, alias):
+            meta["series_similarity"] = 1.0
+            meta["series_match_state"] = "matched"
+            return "matched", 1.0, meta
+    meta["series_match_state"] = "mismatched"
+    return "mismatched", 0.0, meta
+
+
+def _gcd_issue_ids_from_prior_diagnosis(prior_diagnosis: dict[str, Any]) -> set[int]:
+    ids: set[int] = set()
+    for match in prior_diagnosis.get("gcd_matches") or []:
+        if isinstance(match, dict) and match.get("gcd_issue_id") is not None:
+            ids.add(int(match["gcd_issue_id"]))
+    for hit in prior_diagnosis.get("gcd_exact_hits") or []:
+        if isinstance(hit, dict) and hit.get("gcd_issue_id") is not None:
+            ids.add(int(hit["gcd_issue_id"]))
+    for hit in prior_diagnosis.get("gcd_prefix_hits") or []:
+        if isinstance(hit, dict) and hit.get("gcd_issue_id") is not None:
+            ids.add(int(hit["gcd_issue_id"]))
+    return ids
+
+
+def _fingerprint_gcd_issue_ids(session: Session, *, image_path: Path | None) -> set[int]:
+    if image_path is None or not image_path.is_file():
+        return set()
+    out: set[int] = set()
+    hits = search_catalog_fingerprint_hits_for_crop_path(session, crop_path=image_path, limit=5)
+    for hit in hits:
+        if hit.confidence < _FINGERPRINT_MIN_CONFIDENCE:
+            continue
+        issue = session.get(CatalogIssue, int(hit.issue_id))
+        if issue is None:
+            continue
+        linked = extract_gcd_issue_id(issue.external_source_ids)
+        if linked is not None:
+            out.add(int(linked))
+    return out
+
+
+def _has_secondary_scoring_discriminator(
+    session: Session,
+    *,
+    hints: IntakeGcdRecoveryHints,
+    image_path: Path | None,
+    prior_diagnosis: dict[str, Any],
+    publisher_filtered: list[dict[str, Any]],
+) -> bool:
+    if has_reliable_series_hint(hints.series):
         return True
-    series_name = str(row.get("series") or "")
-    row_norm = normalize_series_name(series_name)
-    for alias in hints.series_norm_aliases:
-        if row_norm == alias or series_names_compatible(row_norm, alias):
-            return True
-    if hints.ocr_title:
-        ocr_norm = normalize_series_name(hints.ocr_title)
-        if row_norm == ocr_norm or series_names_compatible(row_norm, ocr_norm):
-            return True
-        if ocr_norm:
-            title = str(row.get("title") or "")
-            if ocr_norm in normalize_series_name(f"{series_name} {title}"):
-                return True
+    if hints.facsimile_or_reprint:
+        return True
+    if has_reliable_series_hint(hints.ocr_title):
+        return True
+    if _fingerprint_gcd_issue_ids(session, image_path=image_path):
+        return True
+    pool_ids = {int(c["gcd_issue_id"]) for c in publisher_filtered}
+    if _gcd_issue_ids_from_prior_diagnosis(prior_diagnosis) & pool_ids:
+        return True
     return False
+
+
+def _prepare_scoring_candidates(
+    session: Session,
+    *,
+    hints: IntakeGcdRecoveryHints,
+    image_path: Path | None,
+    prior_diagnosis: dict[str, Any],
+    publisher_filtered: list[dict[str, Any]],
+) -> tuple[list[dict[str, Any]], str | None]:
+    """Narrow who enters scoring; return block reason when pool is too broad."""
+    if not publisher_filtered:
+        return [], None
+    if len(publisher_filtered) == 1:
+        return publisher_filtered, None
+
+    if has_reliable_series_hint(hints.series):
+        matched = [
+            c
+            for c in publisher_filtered
+            if _series_match_evaluation(hints, c)[0] == "matched"
+        ]
+        return matched, None
+
+    if not _has_secondary_scoring_discriminator(
+        session,
+        hints=hints,
+        image_path=image_path,
+        prior_diagnosis=prior_diagnosis,
+        publisher_filtered=publisher_filtered,
+    ):
+        return [], "insufficient_series_or_title_hint"
+
+    narrowed = list(publisher_filtered)
+    if hints.facsimile_or_reprint:
+        facsimile_rows = [c for c in narrowed if _row_is_reprint_or_facsimile(c)]
+        if facsimile_rows:
+            narrowed = facsimile_rows
+    if has_reliable_series_hint(hints.ocr_title):
+        title_rows = [c for c in narrowed if _title_overlap_score(hints, c) > 0]
+        if title_rows:
+            narrowed = title_rows
+    prior_ids = _gcd_issue_ids_from_prior_diagnosis(prior_diagnosis)
+    if prior_ids:
+        prior_rows = [c for c in narrowed if int(c["gcd_issue_id"]) in prior_ids]
+        if prior_rows:
+            narrowed = prior_rows
+    fp_ids = _fingerprint_gcd_issue_ids(session, image_path=image_path)
+    if fp_ids:
+        fp_rows = [c for c in narrowed if int(c["gcd_issue_id"]) in fp_ids]
+        if fp_rows:
+            narrowed = fp_rows
+
+    if len(narrowed) > 1:
+        return [], "insufficient_series_or_title_hint"
+    return narrowed, None
+
+
+def _series_matches(hints: IntakeGcdRecoveryHints, row: dict[str, Any]) -> bool:
+    state, _, _ = _series_match_evaluation(hints, row)
+    return state == "matched"
 
 
 def _year_matches(hints: IntakeGcdRecoveryHints, row: dict[str, Any]) -> bool:
@@ -312,6 +486,78 @@ def _fingerprint_gcd_boost(
     return 0.0
 
 
+def _score_candidate_breakdown(
+    session: Session,
+    *,
+    row: dict[str, Any],
+    hints: IntakeGcdRecoveryHints,
+    image_path: Path | None,
+) -> tuple[int, dict[str, Any]]:
+    """Score components for instrumentation (same rules as _score_candidate)."""
+    breakdown: dict[str, Any] = {
+        "gcd_issue_id": int(row.get("gcd_issue_id") or 0),
+        "publisher": row.get("publisher"),
+        "series": row.get("series"),
+        "issue_number": row.get("issue_number"),
+        "title": row.get("title"),
+        "pub_year": row.get("pub_year"),
+        "title_pts": 0.0,
+        "issue_pts": 0,
+        "publisher_pts": 0,
+        "series_pts": 0,
+        "year_pts": 0,
+        "facsimile_pts": 0,
+        "fingerprint_pts": 0.0,
+        "total": 0,
+        "series_match_failed": None,
+        "raw_series_hint": hints.series,
+        "normalized_series_hint": normalize_series_name(hints.series) if hints.series else None,
+        "series_hint_reliable": has_reliable_series_hint(hints.series),
+        "candidate_series_normalized": normalize_series_name(str(row.get("series") or "")) or None,
+        "series_similarity": 0.0,
+        "series_match_state": "unavailable",
+    }
+    score = 0
+    if hints.issue_number:
+        if normalize_issue_number(str(row.get("issue_number") or "")) == normalize_issue_number(hints.issue_number):
+            breakdown["issue_pts"] = 4
+            score += 4
+    if _publisher_matches(hints.publisher, str(row.get("publisher") or "")):
+        breakdown["publisher_pts"] = 3
+        score += 3
+    series_state, series_sim, series_meta = _series_match_evaluation(hints, row)
+    breakdown.update(series_meta)
+    if series_state == "mismatched":
+        breakdown["series_match_failed"] = True
+        breakdown["total"] = 0
+        return 0, breakdown
+    if series_state == "matched":
+        breakdown["series_pts"] = 2
+        score += 2
+    if _year_matches(hints, row):
+        breakdown["year_pts"] = 2
+        score += 2
+    else:
+        breakdown["year_pts"] = -2
+        score -= 2
+    title_pts = _title_overlap_score(hints, row)
+    breakdown["title_pts"] = title_pts
+    score += int(title_pts)
+    reprint_row = _row_is_reprint_or_facsimile(row)
+    if hints.facsimile_or_reprint:
+        fac_pts = 2 if reprint_row else -4
+        breakdown["facsimile_pts"] = fac_pts
+        score += fac_pts
+    elif reprint_row and hints.year and hints.year >= 2010:
+        breakdown["facsimile_pts"] = -1
+        score -= 1
+    fp_pts = _fingerprint_gcd_boost(session, image_path=image_path, gcd_issue_id=int(row["gcd_issue_id"]))
+    breakdown["fingerprint_pts"] = fp_pts
+    score += int(fp_pts)
+    breakdown["total"] = score
+    return score, breakdown
+
+
 def _score_candidate(
     session: Session,
     *,
@@ -319,29 +565,7 @@ def _score_candidate(
     hints: IntakeGcdRecoveryHints,
     image_path: Path | None,
 ) -> int:
-    score = 0
-    if hints.issue_number:
-        if normalize_issue_number(str(row.get("issue_number") or "")) == normalize_issue_number(hints.issue_number):
-            score += 4
-    if _publisher_matches(hints.publisher, str(row.get("publisher") or "")):
-        score += 3
-    if _series_matches(hints, row):
-        score += 2
-    else:
-        return 0
-    if _year_matches(hints, row):
-        score += 2
-    else:
-        score -= 2
-    score += int(_title_overlap_score(hints, row))
-    reprint_row = _row_is_reprint_or_facsimile(row)
-    if hints.facsimile_or_reprint:
-        score += 2 if reprint_row else -4
-    elif reprint_row and hints.year and hints.year >= 2010:
-        score -= 1
-    score += int(
-        _fingerprint_gcd_boost(session, image_path=image_path, gcd_issue_id=int(row["gcd_issue_id"]))
-    )
+    score, _ = _score_candidate_breakdown(session, row=row, hints=hints, image_path=image_path)
     return score
 
 
@@ -351,23 +575,92 @@ def _pick_unique_high_confidence_candidate(
     candidates: list[dict[str, Any]],
     hints: IntakeGcdRecoveryHints,
     image_path: Path | None,
-) -> tuple[dict[str, Any] | None, list[dict[str, Any]]]:
+) -> tuple[dict[str, Any] | None, list[dict[str, Any]], dict[str, Any]]:
+    decision: dict[str, Any] = {
+        "min_unique_score": _MIN_UNIQUE_SCORE,
+        "second_best_gap_required": _SECOND_BEST_GAP,
+        "decision_reason": None,
+        "winning_candidate": None,
+        "second_candidate": None,
+        "score_gap": None,
+        "candidates_scored": [],
+    }
     if not hints.issue_number or not hints.publisher:
-        return None, []
-    scored: list[tuple[int, dict[str, Any]]] = []
+        decision["decision_reason"] = "missing_issue_or_publisher_hints"
+        return None, [], decision
+    scored: list[tuple[int, dict[str, Any], dict[str, Any]]] = []
     for row in candidates:
-        s = _score_candidate(session, row=row, hints=hints, image_path=image_path)
+        s, breakdown = _score_candidate_breakdown(session, row=row, hints=hints, image_path=image_path)
+        decision["candidates_scored"].append(breakdown)
         if s > 0:
-            scored.append((s, row))
+            scored.append((s, row, breakdown))
     if not scored:
-        return None, []
+        decision["decision_reason"] = "no_positive_scores"
+        return None, [], decision
     scored.sort(key=lambda pair: pair[0], reverse=True)
-    top_score, top_row = scored[0]
+    top_score, top_row, top_breakdown = scored[0]
+    decision["winning_candidate"] = top_breakdown
+    if len(scored) >= 2:
+        decision["second_candidate"] = scored[1][2]
+        decision["score_gap"] = top_score - scored[1][0]
+    else:
+        decision["score_gap"] = None
     if top_score < _MIN_UNIQUE_SCORE:
-        return None, [r for _, r in scored[:5]]
+        decision["decision_reason"] = "top_score_below_min_unique"
+        return None, [r for _, r, _ in scored[:5]], decision
     if len(scored) >= 2 and (top_score - scored[1][0]) < _SECOND_BEST_GAP:
-        return None, [r for _, r in scored[:5]]
-    return top_row, [top_row]
+        decision["decision_reason"] = "score_gap_below_second_best_threshold"
+        return None, [r for _, r, _ in scored[:5]], decision
+    decision["decision_reason"] = "unique_high_confidence_winner"
+    return top_row, [top_row], decision
+
+
+def _fingerprint_similarity_for_instrumentation(
+    session: Session,
+    *,
+    image_path: Path | None,
+    ranked_rows: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    if image_path is None or not image_path.is_file():
+        return []
+    hits = search_catalog_fingerprint_hits_for_crop_path(session, crop_path=image_path, limit=5)
+    out: list[dict[str, Any]] = []
+    for hit in hits:
+        issue = session.get(CatalogIssue, int(hit.issue_id))
+        linked = extract_gcd_issue_id(issue.external_source_ids) if issue else None
+        out.append(
+            {
+                "catalog_issue_id": int(hit.issue_id),
+                "confidence": float(hit.confidence),
+                "gcd_issue_id": int(linked) if linked is not None else None,
+            }
+        )
+    del ranked_rows  # reserved for future per-candidate fingerprint alignment
+    return out
+
+
+def _log_p106_1_instrumentation(
+    *,
+    barcode: str,
+    hints: IntakeGcdRecoveryHints,
+    prior_diagnosis: dict[str, Any],
+    instrumentation: dict[str, Any],
+) -> None:
+    payload = {
+        "barcode": barcode,
+        "decoded_barcode": prior_diagnosis.get("normalized_barcode") or barcode,
+        "ocr_issue_number": hints.ocr_issue_number,
+        "ocr_title": hints.ocr_title,
+        "ocr_publisher": hints.ocr_publisher,
+        "ocr_year": hints.year,
+        "recovery_hints_issue": hints.issue_number,
+        "recovery_hints_publisher": hints.publisher,
+        "recovery_hints_series": hints.series,
+        "recovery_hints_year": hints.year,
+        "facsimile_or_reprint_hint": hints.facsimile_or_reprint,
+        **instrumentation,
+    }
+    logger.info("p106_1.instrumentation %s", json.dumps(payload, default=str))
 
 
 def diagnose_gcd_non_barcode_recovery(
@@ -384,15 +677,29 @@ def diagnose_gcd_non_barcode_recovery(
     base = dict(prior_diagnosis)
     base["normalized_barcode"] = normalize_scan_preserving_supplement(barcode) or barcode
     if int(prior_diagnosis.get("gcd_match_count") or 0) > 0:
+        base["p106_1_skipped"] = True
+        base["p106_1_skip_reason"] = "prior_p106_gcd_match_count_nonzero"
         return base
     if prior_diagnosis.get("already_resolved"):
         return base
     if not hints.issue_number or not hints.publisher:
+        instrumentation = {
+            "decision_reason": "insufficient_metadata",
+            "ready_to_auto_import": False,
+            "gcd_candidates": [],
+        }
+        _log_p106_1_instrumentation(
+            barcode=barcode,
+            hints=hints,
+            prior_diagnosis=prior_diagnosis,
+            instrumentation=instrumentation,
+        )
         base.update(
             {
                 "recovery_stage": P106_1_RECOVERY_STAGE,
                 "recovery_reason": "insufficient_metadata",
                 "ready_to_auto_import": False,
+                "p106_1_instrumentation": instrumentation,
             }
         )
         return base
@@ -403,12 +710,61 @@ def diagnose_gcd_non_barcode_recovery(
         for c in candidates
         if _publisher_matches(hints.publisher, str(c.get("publisher") or ""))
     ]
-    winner, ranked = _pick_unique_high_confidence_candidate(
+    scorable, pool_block = _prepare_scoring_candidates(
         session,
-        candidates=publisher_filtered,
+        hints=hints,
+        image_path=image_path,
+        prior_diagnosis=prior_diagnosis,
+        publisher_filtered=publisher_filtered,
+    )
+    if pool_block == "insufficient_series_or_title_hint":
+        instrumentation = {
+            "decision_reason": pool_block,
+            "ready_to_auto_import": False,
+            "empty_barcode_candidate_count": len(candidates),
+            "publisher_filtered_count": len(publisher_filtered),
+            "scorable_candidate_count": 0,
+            "series_hint_reliable": has_reliable_series_hint(hints.series),
+        }
+        _log_p106_1_instrumentation(
+            barcode=barcode,
+            hints=hints,
+            prior_diagnosis=prior_diagnosis,
+            instrumentation=instrumentation,
+        )
+        base.update(
+            {
+                "recovery_stage": P106_1_RECOVERY_STAGE,
+                "recovery_reason": pool_block,
+                "recovery_block_reason": pool_block,
+                "ready_to_auto_import": False,
+                "status": P106_STATUS_REVIEW_REQUIRED,
+                "reason": pool_block,
+                "final_reason": pool_block,
+                "gcd_match_count": 0,
+                "p106_1_instrumentation": instrumentation,
+            }
+        )
+        return base
+
+    winner, ranked, pick_decision = _pick_unique_high_confidence_candidate(
+        session,
+        candidates=scorable,
         hints=hints,
         image_path=image_path,
     )
+    fingerprint_hits = _fingerprint_similarity_for_instrumentation(
+        session, image_path=image_path, ranked_rows=ranked
+    )
+    instrumentation = {
+        "empty_barcode_candidate_count": len(candidates),
+        "publisher_filtered_count": len(publisher_filtered),
+        "scorable_candidate_count": len(scorable),
+        "series_hint_reliable": has_reliable_series_hint(hints.series),
+        "fingerprint_top_hits": fingerprint_hits,
+        "pick_decision": pick_decision,
+        "gcd_candidates": pick_decision.get("candidates_scored") or [],
+    }
 
     base.update(
         {
@@ -425,6 +781,7 @@ def diagnose_gcd_non_barcode_recovery(
             },
             "gcd_non_barcode_candidate_count": len(publisher_filtered),
             "gcd_non_barcode_ranked": ranked[:5],
+            "p106_1_instrumentation": instrumentation,
         }
     )
 
@@ -434,12 +791,29 @@ def diagnose_gcd_non_barcode_recovery(
             if ranked
             else "no_gcd_non_barcode_match"
         )
+        if pool_block:
+            reason = pool_block
+        block_reason = pick_decision.get("decision_reason") or reason
+        instrumentation["decision_reason"] = block_reason
+        instrumentation["ready_to_auto_import"] = False
+        instrumentation["ui_finish_reason"] = (
+            "GCD barcode match needs review"
+            if reason == "ambiguous_gcd_non_barcode_candidates"
+            else None
+        )
+        _log_p106_1_instrumentation(
+            barcode=barcode,
+            hints=hints,
+            prior_diagnosis=prior_diagnosis,
+            instrumentation=instrumentation,
+        )
         base.update(
             {
                 "ready_to_auto_import": False,
                 "status": P106_STATUS_REVIEW_REQUIRED if ranked else P106_STATUS_UNRESOLVED,
                 "reason": reason,
                 "final_reason": reason,
+                "recovery_block_reason": block_reason,
                 "gcd_match_count": 0,
             }
         )
@@ -462,6 +836,17 @@ def diagnose_gcd_non_barcode_recovery(
         cache_path=cache_path,
         gcd_match=gcd_match,
         gcd_issue_id=gcd_issue_id,
+    )
+
+    instrumentation["decision_reason"] = "unique_gcd_non_barcode_recovery"
+    instrumentation["ready_to_auto_import"] = True
+    instrumentation["winning_gcd_issue_id"] = gcd_issue_id
+    instrumentation["catalog_issue_id"] = catalog_id
+    _log_p106_1_instrumentation(
+        barcode=barcode,
+        hints=hints,
+        prior_diagnosis=prior_diagnosis,
+        instrumentation=instrumentation,
     )
 
     base.update(
@@ -507,6 +892,13 @@ def enrich_gap_diagnosis_with_gcd_non_barcode_recovery(
     p105: Any,
 ) -> dict[str, Any]:
     if int(prior_diagnosis.get("gcd_match_count") or 0) > 0:
+        logger.info(
+            "p106_1.skipped barcode=%s prior_gcd_match_count=%s prior_reason=%s prior_status=%s",
+            barcode,
+            prior_diagnosis.get("gcd_match_count"),
+            prior_diagnosis.get("reason"),
+            prior_diagnosis.get("status"),
+        )
         return prior_diagnosis
     hints = gather_intake_gcd_recovery_hints(
         session,
