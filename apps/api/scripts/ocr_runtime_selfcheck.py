@@ -5,7 +5,8 @@ Usage (Render shell, or `docker run --rm <image> python scripts/ocr_runtime_self
     python scripts/ocr_runtime_selfcheck.py
 
 Reports Python, Tesseract (OCR), OpenCV, ZXing, and the resolved TESSERACT_CMD.
-Exit code 0 only when Tesseract, OpenCV, and ZXing are all available.
+Verifies `import app.main` (production entry). Exit code 0 only when Tesseract,
+OpenCV, and ZXing are all available.
 """
 
 from __future__ import annotations
@@ -19,6 +20,12 @@ API_ROOT = Path(__file__).resolve().parents[1]
 
 def main() -> int:
     sys.path.insert(0, str(API_ROOT))
+
+    try:
+        import app.main  # noqa: F401 — same import path as production uvicorn entry
+    except Exception as exc:  # noqa: BLE001
+        print(f"SELFCHECK FAILED: import app.main — {exc}", file=sys.stderr, flush=True)
+        return 1
 
     from app.services.intake_runtime_selfcheck import (
         collect_intake_runtime_report,

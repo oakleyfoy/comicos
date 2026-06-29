@@ -1,110 +1,207 @@
-# Render OCR (Tesseract) availability for ComicOS intake
+# Render OCR (Tesseract) — production API Docker cutover
 
 ## Problem
 
-Live intake item 68 showed:
+Live intake showed `ocr_engine_available=false` and
+`ocr_error="Local Tesseract OCR engine is unavailable on this host."` because
+Render's **native Python** API cannot `apt-get install tesseract-ocr`.
+
+## Where OCR runs
+
+Photo intake identification (including P106.1 cover OCR) runs in the **API**
+process via `run_intake_item_async` (background thread inside `comic-os-api`).
+It does **not** run on the RQ worker. The worker can stay on native Python for
+now; only the **API** needs Docker for Tesseract in production.
+
+**Local development** stays native Python — no Docker required on your laptop.
+
+## Fix (production only)
+
+Deploy a second web service (`comic-os-api-docker`) using `apps/api/Dockerfile`,
+validate OCR, then move `api.comicosapp.com` to it and suspend the old native
+`comic-os-api`.
+
+Repo assets:
+
+| File | Purpose |
+|------|---------|
+| `apps/api/Dockerfile` | Tesseract + OpenCV libs + Playwright/Chromium; `WORKDIR /app/apps/api` |
+| `apps/api/scripts/ocr_runtime_selfcheck.py` | Shell self-check → `SELFCHECK OK` |
+| `GET /api/ops/ocr-health` | Ops JSON probe (auth required) |
+
+---
+
+## A. Create new Render Web Service
+
+Dashboard → **New** → **Web Service** → repo `oakleyfoy/comicos`, branch `main`.
+
+| Setting | Value |
+|---------|--------|
+| **Name** | `comic-os-api-docker` |
+| **Project / environment** | ComicOS / Production |
+| **Runtime** | **Docker** |
+| **Root Directory** | `apps/api` |
+| **Dockerfile Path** | `./Dockerfile` (relative to root directory — **not** `apps/api/Dockerfile`) |
+| **Docker Build Context Directory** | `.` (default) |
+| **Region / plan** | Match `comic-os-api` (Ohio, **Standard**) |
+| **Health Check Path** | Same as old API (Settings → Health Checks; often `/health`) |
+
+Default container command is the Dockerfile `CMD`:
 
 ```text
-ocr_engine_available=false
-ocr_error="Local Tesseract OCR engine is unavailable on this host."
+python scripts/render_web_start.py
 ```
 
-With no Tesseract binary, P106.1 cover recovery gets no `ocr_title`, no
-`raw_ocr_text_excerpt`, and no facsimile cue, so it blocks with
-`insufficient_series_or_title_hint`.
+Do **not** override unless you intentionally change the production entrypoint.
 
-## Root cause
+---
 
-The API and worker were deployed on Render's **native Python runtime**
-(`pip install -e .[dev]` build, `python scripts/render_web_start.py` start).
-The native runtime runs builds without root and has **no apt-get path**, so the
-`tesseract-ocr` system binary can never be installed. `tesseract --version`
-fails in the shell, and `_resolve_ocr_engine_cmd()` cannot find the engine.
+## B. Environment variables
 
-## Fix: Docker runtime with Tesseract baked in
+1. Open old service env:  
+   `comic-os-api` → **Environment** → **Export** → **Copy .env**
+2. On `comic-os-api-docker` → **Add from .env** → paste → **Add variables**
+3. Copy **every** key from the old API (database, Redis, secrets, eBay, R2, GCD, etc.)
+4. Confirm or set explicitly:
 
-Cover OCR runs on the **intake worker** (and the API exposes the health probe),
-so **both** the `comic-os-api` web service and the `comic-os-worker` background
-worker must switch to Docker.
+```text
+TESSERACT_CMD=/usr/bin/tesseract
+PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
+```
 
-Added in this repo:
+The Dockerfile sets both as image defaults; copying from the old API may still
+have a legacy `PLAYWRIGHT_BROWSERS_PATH` — **override** it to `/ms-playwright`
+so Playwright finds the browser baked into the image.
 
-- `apps/api/Dockerfile` — `python:3.12-slim` + apt installs
-  `tesseract-ocr libtesseract-dev` (and `libgl1 libglib2.0-0` for opencv
-  headless), pins `TESSERACT_CMD=/usr/bin/tesseract`, and runs
-  `scripts/render_web_start.py` (web) — the worker overrides the command.
-- `apps/api/.dockerignore` — keeps the build context small (excludes
-  `data/`, caches, tests, decompiler scratch).
-- `docs/render/API_WORKER_DOCKER_BLUEPRINT.yaml` — reproducible Docker
-  blueprint for the API + worker.
+Remove any empty “template” env row before deploy (Render treats it as required).
 
-### Option A — switch existing services in the Render dashboard
+---
 
-For **each** of `comic-os-api` and `comic-os-worker`:
+## C. Deploy
 
-1. Service → **Settings** → **Build & Deploy**.
-2. **Runtime**: change to **Docker**.
-3. **Root Directory**: `apps/api`.
-4. **Dockerfile Path**: `apps/api/Dockerfile`.
-5. **Docker Build Context Directory**: `apps/api`.
-6. Worker only — **Docker Command**: `python -m app.workers.rq_worker`
-   (the API web service keeps the Dockerfile default).
-7. **Environment** → add `TESSERACT_CMD=/usr/bin/tesseract` (the Dockerfile
-   already sets this as a default; setting it explicitly is belt-and-suspenders).
-8. **Save**, then **Manual Deploy → Clear build cache & deploy**.
+1. **Manual Deploy** → **Clear build cache & deploy**
+2. Wait for build (Playwright + pip can take several minutes)
+3. Confirm deploy log ends with service live (uvicorn / health check passing)
 
-### Option B — apply the blueprint
+---
 
-Apply `docs/render/API_WORKER_DOCKER_BLUEPRINT.yaml` (New → Blueprint), then fill
-in the `sync: false` secrets. Avoid creating duplicate services if the
-dashboard ones already exist — Option A is safer for the live services.
+## D. Verify in Render shell
 
-## Verification
+Service → **Shell** (instance running):
 
-### 1. Shell on the deployed service
+```bash
+cd /app/apps/api
+python scripts/ocr_runtime_selfcheck.py
+```
+
+**Expected:**
+
+```text
+intake.runtime.startup python=3.12.x tesseract_available=True ... TESSERACT_CMD='/usr/bin/tesseract' resolved='/usr/bin/tesseract' ...
+SELFCHECK OK
+```
+
+Exit code must be `0`.
+
+Optional:
 
 ```bash
 tesseract --version
-# expected: "tesseract 5.x.x" ...
 echo "$TESSERACT_CMD"
-# expected: /usr/bin/tesseract
+echo "$PLAYWRIGHT_BROWSERS_PATH"
 ```
 
-### 2. OCR health endpoint
+---
 
-```bash
-curl -s https://api.comicosapp.com/api/ops/ocr-health
+## E. Verify API endpoint
+
+`GET /api/ops/ocr-health` requires a logged-in **ops admin** user
+(`OPS_ADMIN_EMAILS` in settings). Anonymous calls return `401`.
+
+**From browser (easiest):** log into ComicOS as an ops admin, open DevTools →
+Network, or visit the API with your session cookie:
+
+```text
+https://api.comicosapp.com/api/ops/ocr-health
 ```
 
-Expected (ops-admin authenticated):
+(Use the **temporary** `*.onrender.com` URL for the docker service **before**
+domain cutover.)
+
+**Expected JSON:**
 
 ```json
 {
   "tesseract_available": true,
   "tesseract_cmd": "/usr/bin/tesseract",
-  "version": "5.x.x",
+  "version": "tesseract 5.x.x",
   "error": null
 }
 ```
 
-### 3. Startup log confirmation
+**From Render shell** (no browser auth): rely on `ocr_runtime_selfcheck.py` above;
+the health route still enforces `get_current_user` + ops admin.
 
-On boot the API logs (see `app/main.py:_log_tesseract_on_startup`):
+---
 
-```text
-ocr.tesseract.startup TESSERACT_CMD='/usr/bin/tesseract' resolved='/usr/bin/tesseract' version=5.x.x
+## F. Cutover (production traffic)
+
+Only after D and E pass on the **docker** service temp URL:
+
+1. **Settings → Custom Domains** on `comic-os-api-docker` → add `api.comicosapp.com`
+2. **Remove** `api.comicosapp.com` from old `comic-os-api` (or move domain per Render UI)
+3. Wait until certificate shows **Verified** / active
+4. Confirm frontend still uses `https://api.comicosapp.com` (unchanged URL for users)
+5. Smoke-test: `curl -s https://api.comicosapp.com/health`
+6. **Suspend** (do not delete) old `comic-os-api` only after the docker service serves the domain
+
+Keep `comic-os-worker` on native Python unless you have another reason to migrate it.
+
+---
+
+## G. Rollback
+
+1. Reattach `api.comicosapp.com` to **comic-os-api** (native)
+2. **Resume** `comic-os-api` if suspended
+3. **Suspend** `comic-os-api-docker`
+
+OCR will be unavailable again on intake until the Docker API is back on the domain.
+
+---
+
+## Post-deploy checklist
+
+Use this after cutover (or on the docker service before cutover):
+
+- [ ] API boots without crash; `GET /health` returns OK
+- [ ] Startup logs include `ocr.tesseract.startup` and `intake.runtime.startup` with  
+      `TESSERACT_CMD='/usr/bin/tesseract'`, `resolved='/usr/bin/tesseract'`,  
+      `tesseract_version='tesseract 5.x.x'`
+- [ ] Render shell: `python scripts/ocr_runtime_selfcheck.py` → **SELFCHECK OK**
+- [ ] Ops-authenticated `/api/ops/ocr-health` → `tesseract_available: true`
+- [ ] Normal barcode scans still resolve (no scoring/threshold changes in this work)
+- [ ] **Manual (you):** rescan `75960620629200111` and confirm  
+      `barcode_gap.recovery_hints.ocr_engine_available=true`,  
+      non-empty `raw_ocr_text_excerpt`, facsimile cue if cover text matches
+
+---
+
+## Local development (no Docker)
+
+On your laptop:
+
+- Install Tesseract for your OS, or accept `ocr_engine_available=false` in local intake tests
+- Run API with existing venv: `pip install -e ".[dev]"` (and Playwright chromium if you need retailer browser jobs)
+- Optional image check (not required for local dev):
+
+```bash
+docker buildx build --platform linux/amd64 -f apps/api/Dockerfile apps/api
 ```
 
-### 4. Rescan barcode 75960620629200111
+---
 
-After both services redeploy on Docker, rescan the barcode and confirm on the
-resulting `IntakeSessionItem.barcode_read_json.barcode_gap`:
+## What this change does **not** do
 
-- `recovery_hints.ocr_engine_available = true`
-- `recovery_hints.ocr_error = null`
-- `recovery_hints.raw_ocr_text_excerpt` is non-empty
-- `recovery_hints.facsimile_or_reprint = true` when the cover reads
-  "Facsimile Edition"
-
-No scoring or thresholds changed — this only restores the OCR signal that
-P106.1 was already designed to consume.
+- Does not change P106.1 scoring or thresholds
+- Does not require Docker for local ComicOS development
+- Does not migrate the worker for intake OCR (API-only for Tesseract)
