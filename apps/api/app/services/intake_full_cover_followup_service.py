@@ -57,10 +57,34 @@ def resolve_intake_recognition_image_path(
     return primary_path, False
 
 
+from app.services.intake_scanner_barcode_authority_service import p106_gap_is_exact_barcode_authority
+
+
+def gcd_barcode_lookup_missed(gap_diag: dict[str, Any] | None) -> bool:
+    """True when GCD has no attachable exact barcode hit for this scan (P106.1 metadata pool does not count)."""
+    if gap_diag is None:
+        return True
+    if gap_diag.get("ready_to_auto_import"):
+        return False
+    if p106_gap_is_exact_barcode_authority(gap_diag):
+        return False
+    if int(gap_diag.get("gcd_sql_exact_barcode_column_count") or 0) > 0:
+        return False
+    reason = str(gap_diag.get("reason") or gap_diag.get("final_reason") or "")
+    if reason in {"no_gcd_barcode_match", "gcd_database_missing"}:
+        return True
+    if int(gap_diag.get("gcd_match_count") or 0) == 0:
+        return True
+    if gap_diag.get("recovery_stage") and not gap_diag.get("ready_to_auto_import"):
+        return True
+    return False
+
+
 def should_require_full_cover_followup(
     *,
     gap_diag: dict[str, Any] | None,
     primary_region: FingerprintRegionAssessment,
+    recognition_region: FingerprintRegionAssessment,
     has_full_cover_image: bool,
     local_catalog_hit: bool,
     p106_exact_barcode_authority: bool,
@@ -74,12 +98,17 @@ def should_require_full_cover_followup(
         return False
     if p106_exact_barcode_authority:
         return False
-    if gap_diag is not None and gap_diag.get("ready_to_auto_import"):
+    if not gcd_barcode_lookup_missed(gap_diag):
         return False
-    if gap_diag is None or int(gap_diag.get("gcd_match_count") or 0) > 0:
+    if (
+        recognition_region.fingerprint_image_region == REGION_FULL_COVER
+        and recognition_region.fingerprint_region_safe
+        and primary_region.fingerprint_image_region == REGION_FULL_COVER
+        and primary_region.fingerprint_region_safe
+    ):
         return False
-    if primary_region.fingerprint_image_region == REGION_FULL_COVER and primary_region.fingerprint_region_safe:
-        return False
+    if not recognition_region.fingerprint_region_safe:
+        return True
     if not primary_region.fingerprint_region_safe:
         return True
     return False
@@ -88,6 +117,8 @@ def should_require_full_cover_followup(
 def apply_full_cover_followup_to_diagnosis(
     diagnosis: dict[str, Any],
     primary_region: FingerprintRegionAssessment,
+    *,
+    recognition_region: FingerprintRegionAssessment | None = None,
 ) -> None:
     diagnosis.pop("needs_review_top_candidates", None)
     diagnosis.pop("fingerprint_review", None)
@@ -97,8 +128,15 @@ def apply_full_cover_followup_to_diagnosis(
     diagnosis["review_reason"] = FULL_COVER_REASON_CODE
     diagnosis["ready_to_auto_import"] = False
     merge_fingerprint_region_instrumentation(diagnosis, primary_region)
+    if recognition_region is not None:
+        diagnosis["recognition_fingerprint_image_region"] = recognition_region.fingerprint_image_region
+        diagnosis["recognition_fingerprint_region_safe"] = recognition_region.fingerprint_region_safe
     if not diagnosis.get("fingerprint_suppressed_reason"):
-        diagnosis["fingerprint_suppressed_reason"] = primary_region.fingerprint_suppressed_reason or "unsafe_crop"
+        diagnosis["fingerprint_suppressed_reason"] = (
+            recognition_region.fingerprint_suppressed_reason
+            if recognition_region and recognition_region.fingerprint_suppressed_reason
+            else primary_region.fingerprint_suppressed_reason or "unsafe_crop"
+        )
 
 
 def merge_full_cover_flags_into_barcode_read(

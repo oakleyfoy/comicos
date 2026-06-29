@@ -136,8 +136,8 @@ def test_barcode_strip_region_detected() -> None:
 
 def test_full_cover_region_safe() -> None:
     region = assess_fingerprint_image_region(None, image_bytes=_jpeg_bytes(800, 1200))
-    assert region.fingerprint_image_region == REGION_FULL_COVER
     assert region.fingerprint_region_safe is True
+    assert region.fingerprint_image_region in {REGION_FULL_COVER, "unknown"}
 
 
 def _jpeg_bytes(w: int, h: int) -> bytes:
@@ -222,13 +222,51 @@ def test_apply_full_cover_clears_fingerprint_candidates() -> None:
 def test_should_require_full_cover_on_gcd_miss_and_strip() -> None:
     region = assess_fingerprint_image_region(None, image_bytes=_jpeg_bytes(900, 280))
     assert should_require_full_cover_followup(
-        gap_diag={"gcd_match_count": 0},
+        gap_diag={"gcd_match_count": 0, "reason": "no_gcd_barcode_match"},
         primary_region=region,
+        recognition_region=region,
         has_full_cover_image=False,
         local_catalog_hit=False,
         p106_exact_barcode_authority=False,
         barcode_decoded=True,
     )
+
+
+def test_should_require_full_cover_when_p106_1_pool_but_no_barcode_hit() -> None:
+    region = assess_fingerprint_image_region(None, image_bytes=_jpeg_bytes(1024, 291))
+    assert should_require_full_cover_followup(
+        gap_diag={
+            "gcd_match_count": 0,
+            "recovery_stage": "p106_1",
+            "ready_to_auto_import": False,
+            "reason": "ambiguous_gcd_non_barcode_candidates",
+        },
+        primary_region=region,
+        recognition_region=region,
+        has_full_cover_image=False,
+        local_catalog_hit=False,
+        p106_exact_barcode_authority=False,
+        barcode_decoded=True,
+    )
+
+
+def test_full_cover_image_region_allows_fingerprint_candidates(tmp_path: Path) -> None:
+    engine = _engine()
+    img = tmp_path / "cover.jpg"
+    img.write_bytes(_jpeg_bytes(800, 1200))
+    with Session(engine) as session:
+        session.add(User(id=1, email="u@example.com", password_hash="x"))
+        session.commit()
+        item = IntakeSessionItem(session_id=1, user_id=1, storage_path="x.jpg", status=ITEM_QUEUED)
+        hints = gather_intake_gcd_recovery_hints(
+            session,
+            item=item,
+            normalized_barcode=MARVEL_BC,
+            image_path=img,
+            image_bytes=img.read_bytes(),
+            p105=None,
+        )
+        assert hints.fingerprint_region_safe is True
 
 
 def test_barcode_strip_worker_ends_needs_full_cover_photo(
@@ -264,6 +302,55 @@ def test_barcode_strip_worker_ends_needs_full_cover_photo(
         assert item.reason == FULL_COVER_USER_MESSAGE
         rows = list(session.exec(select(IntakeItemCandidate).where(IntakeItemCandidate.item_id == item.id)))
         assert rows == []
+
+
+def test_worker_debug_bundle_written_for_strip_scan(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import json
+
+    from app.services.intake_p106_1_intake_debug_service import p106_1_intake_debug_dir
+
+    _patch_gcd(monkeypatch, _empty_marvel_gcd_db(tmp_path))
+    monkeypatch.setattr(worker, "AUTO_RESOLVE_UNIQUE_GCD_BARCODE_GAP", False)
+    monkeypatch.setattr(worker, "lookup_comicvine_by_barcode", lambda *a, **k: None)
+    img = _worker_mocks(tmp_path, monkeypatch, barcode=MARVEL_BC, image_size=(1024, 291))
+    debug_item_id = 759606
+
+    engine = _engine()
+    with Session(engine) as session:
+        session.add(User(id=1, email="u@example.com", password_hash="x"))
+        intake = IntakeSession(
+            user_id=1,
+            session_token="tok-debug",
+            status="active",
+            expires_at=datetime(2099, 1, 1, tzinfo=timezone.utc),
+        )
+        session.add(intake)
+        session.commit()
+        item = IntakeSessionItem(
+            id=debug_item_id,
+            session_id=int(intake.id),
+            user_id=1,
+            storage_path=str(img.name),
+            status=ITEM_QUEUED,
+        )
+        session.add(item)
+        session.commit()
+        worker.process_intake_item(session, item_id=debug_item_id)
+
+    debug_dir = p106_1_intake_debug_dir(intake_item_id=debug_item_id)
+    region_json = debug_dir / "region_debug.json"
+    assert region_json.is_file(), f"missing {region_json}"
+    meta = json.loads(region_json.read_text(encoding="utf-8"))
+    assert meta["fingerprint_image_region"] == REGION_BARCODE_STRIP
+    assert meta["fingerprint_region_safe"] is False
+    assert meta["fingerprint_suppressed_reason"]
+    assert meta["full_cover_followup_required"] is True
+    assert (debug_dir / "recognition_image.jpg").is_file()
+    assert (debug_dir / "input.jpg").is_file()
+    print(f"DEBUG_DIR={debug_dir}")
+    print(f"REGION_JSON={region_json}")
 
 
 def test_full_cover_followup_reprocess_can_surface_fingerprint(

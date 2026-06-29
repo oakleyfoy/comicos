@@ -578,11 +578,9 @@ def process_intake_item(session: Session, *, item_id: int) -> str:
             return _fail(session, item, "Captured image is missing from storage.")
         image_bytes = abs_path.read_bytes()
 
-        from app.services.intake_fingerprint_image_region_service import assess_fingerprint_image_region
         from app.services.intake_full_cover_followup_service import resolve_intake_recognition_image_path
 
-        recognition_path, _using_full_cover_followup = resolve_intake_recognition_image_path(item, abs_path)
-        primary_region = assess_fingerprint_image_region(abs_path, image_bytes=image_bytes)
+        recognition_path, using_full_cover_followup = resolve_intake_recognition_image_path(item, abs_path)
         recognition_bytes = image_bytes
         if recognition_path.resolve() != abs_path.resolve():
             recognition_bytes = recognition_path.read_bytes()
@@ -615,6 +613,39 @@ def process_intake_item(session: Session, *, item_id: int) -> str:
             known_main_upc=known_main or None,
         )
         item.barcode_read_json = p105.to_json()
+
+        import io as io_mod
+
+        from PIL import Image
+
+        from app.services.intake_fingerprint_image_region_service import (
+            assess_fingerprint_image_region,
+            barcode_crop_jpeg_bytes,
+            merge_fingerprint_region_instrumentation,
+        )
+        from app.services.p105_comic_barcode_regions import compute_barcode_region_geometry
+
+        def _geometry_from_bytes(raw: bytes):
+            with Image.open(io_mod.BytesIO(raw)) as pil:
+                return compute_barcode_region_geometry(pil.convert("RGB"))
+
+        primary_geometry = _geometry_from_bytes(image_bytes)
+        recognition_geometry = (
+            _geometry_from_bytes(recognition_bytes)
+            if recognition_bytes is not image_bytes
+            else primary_geometry
+        )
+        primary_region = assess_fingerprint_image_region(
+            abs_path,
+            image_bytes=image_bytes,
+            geometry=primary_geometry,
+        )
+        recognition_region = assess_fingerprint_image_region(
+            recognition_path,
+            image_bytes=recognition_bytes,
+            geometry=recognition_geometry,
+            force_full_cover=using_full_cover_followup,
+        )
 
         barcode = p105.reconstructed_full or p105.main_upc or item.raw_barcode
         if not barcode and not p105.main_upc:
@@ -761,6 +792,7 @@ def process_intake_item(session: Session, *, item_id: int) -> str:
         gap_diag: dict[str, Any] | None = None
         gap_diag_error: str | None = None
         p106_exact_barcode_authority = False
+        p106_1_attempted = False
 
         from app.services.gcd_catalog_import_dashboard_service import resolve_cache_path, resolve_gcd_path
 
@@ -1031,19 +1063,70 @@ def process_intake_item(session: Session, *, item_id: int) -> str:
                         intake_has_full_cover_followup_image,
                         should_require_full_cover_followup,
                     )
+                    from app.services.intake_p106_1_intake_debug_service import (
+                        log_intake_fingerprint_review_instrumentation,
+                        save_p106_1_intake_debug_bundle,
+                    )
                     from app.services.p106_fingerprint_review_fallback_service import (
                         persist_review_candidates_on_intake_item,
                     )
 
-                    if should_require_full_cover_followup(
+                    if not recognition_region.fingerprint_region_safe:
+                        gap_diag.pop("needs_review_top_candidates", None)
+                        gap_diag.pop("fingerprint_review", None)
+                        gap_diag.pop("review_decision", None)
+                        merge_fingerprint_region_instrumentation(gap_diag, recognition_region)
+
+                    tops = gap_diag.get("needs_review_top_candidates")
+                    review_count = len(tops) if isinstance(tops, list) else 0
+                    full_cover_required = should_require_full_cover_followup(
                         gap_diag=gap_diag,
                         primary_region=primary_region,
+                        recognition_region=recognition_region,
                         has_full_cover_image=intake_has_full_cover_followup_image(item),
                         local_catalog_hit=local_catalog_hit,
                         p106_exact_barcode_authority=p106_exact_barcode_authority,
                         barcode_decoded=bool(normalized),
-                    ):
-                        apply_full_cover_followup_to_diagnosis(gap_diag, primary_region)
+                    )
+                    debug_payload: dict[str, Any] = {
+                        "intake_item_id": item_id,
+                        "barcode": normalized,
+                        "recognition_image_path": str(recognition_path),
+                        "fingerprint_image_path": str(recognition_path),
+                        "primary_image_path": str(abs_path),
+                        "full_cover_followup_required": full_cover_required,
+                        "p106_1_called": p106_1_attempted,
+                        "p106_1_review_candidates_count": review_count,
+                    }
+                    merge_fingerprint_region_instrumentation(debug_payload, recognition_region)
+                    debug_payload["primary_fingerprint_image_region"] = primary_region.fingerprint_image_region
+                    debug_payload["primary_fingerprint_region_safe"] = primary_region.fingerprint_region_safe
+                    log_intake_fingerprint_review_instrumentation(debug_payload)
+                    try:
+                        barcode_crop = barcode_crop_jpeg_bytes(image_bytes, primary_geometry)
+                        save_p106_1_intake_debug_bundle(
+                            intake_item_id=int(item_id),
+                            primary_path=abs_path,
+                            primary_bytes=image_bytes,
+                            recognition_path=recognition_path,
+                            recognition_bytes=recognition_bytes,
+                            fingerprint_path=recognition_path,
+                            barcode_crop_bytes=barcode_crop,
+                            region_debug=debug_payload,
+                        )
+                    except Exception:
+                        logger.warning(
+                            "intake.p106_1_debug_bundle_failed item_id=%s",
+                            item_id,
+                            exc_info=True,
+                        )
+
+                    if full_cover_required:
+                        apply_full_cover_followup_to_diagnosis(
+                            gap_diag,
+                            primary_region,
+                            recognition_region=recognition_region,
+                        )
                         _clear_candidates(session, item_id)
                         try:
                             _apply_p106_diagnosis_to_intake_item(item, gap_diag=gap_diag)

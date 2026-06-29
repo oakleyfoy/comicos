@@ -330,6 +330,13 @@ def persist_review_candidates_on_intake_item(
     if diagnosis.get("needs_full_cover_photo"):
         clear_candidates_fn(session, item_id)
         return
+    if diagnosis.get("fingerprint_region_safe") is False:
+        clear_candidates_fn(session, item_id)
+        return
+    region = str(diagnosis.get("fingerprint_image_region") or "")
+    if region in {"barcode_strip", "upc_region"}:
+        clear_candidates_fn(session, item_id)
+        return
     tops = diagnosis.get("needs_review_top_candidates")
     if not isinstance(tops, list) or not tops:
         return

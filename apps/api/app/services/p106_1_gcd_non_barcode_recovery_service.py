@@ -152,6 +152,11 @@ def _resolve_fingerprint_recovery_candidates(
 ) -> list[FingerprintRecoveryCandidate]:
     if image_path is None or not image_path.is_file():
         return []
+    logger.info(
+        "p106_1.fingerprint_search crop_path=%s exists=%s",
+        image_path,
+        image_path.is_file(),
+    )
     hits = search_catalog_fingerprint_hits_for_crop_path(session, crop_path=image_path, limit=5)
     out: list[FingerprintRecoveryCandidate] = []
     for hit in hits:
