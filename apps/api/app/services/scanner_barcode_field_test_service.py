@@ -149,6 +149,12 @@ class ScannerBarcodeResolutionTrace:
     p106_gcd_lookup_final_reason: str | None = None
     p106_auto_imported: bool = False
     p106_auto_attached: bool = False
+    p106_1_called: bool = False
+    p106_1_status: str | None = None
+    p106_1_action: str | None = None
+    p106_1_recovery_block_reason: str | None = None
+    p106_1_fingerprint_candidate_count: int | None = None
+    p106_1_fingerprint_candidate_used: bool | None = None
     comicvine_fallback_called: bool = False
     gap_diagnosis: dict[str, Any] | None = field(default=None, repr=False)
     match_source: str | None = None
@@ -190,6 +196,36 @@ class ScannerBarcodeResolutionTrace:
             self.p106_auto_attached = True
             self.p106_status = P106_STATUS_AUTO_ATTACHED
 
+    def apply_p106_1_from_diagnosis(
+        self,
+        diagnosis: dict[str, Any] | None,
+        *,
+        gcd_path: Path | None,
+    ) -> None:
+        if not diagnosis:
+            return
+        self.p106_1_called = True
+        self.gap_diagnosis = diagnosis
+        path_str, mtime = gcd_database_metadata(gcd_path)
+        self.p106_gcd_database_path = path_str
+        self.p106_gcd_database_modified_at = mtime
+        payload = barcode_gap_payload_from_diagnosis(diagnosis)
+        self.apply_p106_diagnosis(diagnosis, gcd_path=gcd_path)
+        self.p106_1_status = diagnosis.get("status")
+        self.p106_1_action = payload.get("action") or diagnosis.get("proposed_action")
+        inst = diagnosis.get("p106_1_instrumentation") if isinstance(diagnosis.get("p106_1_instrumentation"), dict) else {}
+        self.p106_1_recovery_block_reason = (
+            diagnosis.get("recovery_block_reason")
+            or diagnosis.get("recovery_reason")
+            or inst.get("decision_reason")
+        )
+        fp_count = diagnosis.get("fingerprint_candidate_count")
+        if fp_count is None:
+            fp_count = inst.get("fingerprint_candidate_count")
+        self.p106_1_fingerprint_candidate_count = int(fp_count) if fp_count is not None else None
+        used = inst.get("fingerprint_candidate_used")
+        self.p106_1_fingerprint_candidate_used = bool(used) if used is not None else None
+
 
 def build_scanner_barcode_event(
     *,
@@ -221,6 +257,12 @@ def build_scanner_barcode_event(
         "p106_gcd_lookup_final_reason": trace.p106_gcd_lookup_final_reason,
         "p106_auto_imported": trace.p106_auto_imported,
         "p106_auto_attached": trace.p106_auto_attached,
+        "p106_1_called": trace.p106_1_called,
+        "p106_1_status": trace.p106_1_status,
+        "p106_1_action": trace.p106_1_action,
+        "p106_1_recovery_block_reason": trace.p106_1_recovery_block_reason,
+        "p106_1_fingerprint_candidate_count": trace.p106_1_fingerprint_candidate_count,
+        "p106_1_fingerprint_candidate_used": trace.p106_1_fingerprint_candidate_used,
         "comicvine_fallback_called": trace.comicvine_fallback_called,
         "match_source": trace.match_source or item.match_source,
         "partial_barcode": trace.partial_barcode,

@@ -465,6 +465,51 @@ def _p106_reports_no_gcd_match(gap_diag: dict[str, Any] | None) -> bool:
     return gap_diag is None or int(gap_diag.get("gcd_match_count") or 0) == 0
 
 
+def _should_run_p106_1_non_barcode_recovery(
+    *,
+    normalized: str,
+    gap_diag: dict[str, Any] | None,
+    candidate: dict[str, Any] | None,
+) -> bool:
+    """Run P106.1 when P106 found no attachable GCD barcode match and local catalog missed."""
+    if candidate is not None:
+        return False
+    if len(normalize_upc(normalized)) < 17:
+        return False
+    if gap_diag is not None and int(gap_diag.get("gcd_match_count") or 0) > 0:
+        return False
+    if gap_diag is not None and gap_diag.get("p106_1_skipped"):
+        return False
+    return True
+
+
+def _should_call_comicvine_after_p106_pipeline(
+    *,
+    gap_diag: dict[str, Any] | None,
+    gcd_path: Path,
+    normalized: str,
+    candidate: dict[str, Any] | None,
+    p106_1_attempted: bool,
+) -> bool:
+    if candidate is not None:
+        return False
+    if not _p106_reports_no_gcd_match(gap_diag):
+        return False
+    if _gcd_has_exact_barcode_authority(gcd_path, normalized) or p106_gap_is_exact_barcode_authority(
+        gap_diag or {}
+    ):
+        return False
+    if gap_diag and gap_diag.get("ready_to_auto_import"):
+        return False
+    if _should_run_p106_1_non_barcode_recovery(
+        normalized=normalized,
+        gap_diag=gap_diag,
+        candidate=candidate,
+    ) and not p106_1_attempted:
+        return False
+    return True
+
+
 def _cover_confirms_barcode_match(
     session: Session,
     *,
@@ -730,6 +775,7 @@ def process_intake_item(session: Session, *, item_id: int) -> str:
 
             record_missing_barcode_queue(session, item=item)
             trace.p106_called = True
+            p106_1_attempted = False
             if gap_diag is None or (
                 _p106_reports_no_gcd_match(gap_diag) and _gcd_has_exact_barcode_authority(gcd_path, normalized)
             ):
@@ -800,17 +846,19 @@ def process_intake_item(session: Session, *, item_id: int) -> str:
                         exc_info=True,
                     )
 
-            if (
-                candidate is None
-                and _p106_reports_no_gcd_match(gap_diag)
-                and not _gcd_has_exact_barcode_authority(gcd_path, normalized)
-                and not p106_gap_is_exact_barcode_authority(gap_diag or {})
+            p106_1_attempted = False
+            if _should_run_p106_1_non_barcode_recovery(
+                normalized=normalized,
+                gap_diag=gap_diag,
+                candidate=candidate,
             ):
                 from app.services.p106_1_gcd_non_barcode_recovery_service import (
+                    P106_1_RECOVERY_STAGE,
                     build_p106_1_intake_hint_snapshot,
                     enrich_gap_diagnosis_with_gcd_non_barcode_recovery,
                 )
 
+                p106_1_attempted = True
                 recovery_hints, hint_snapshot = build_p106_1_intake_hint_snapshot(
                     session,
                     item=item,
@@ -836,7 +884,8 @@ def process_intake_item(session: Session, *, item_id: int) -> str:
                     p105=p105,
                     recovery_hints=recovery_hints,
                 )
-                if gap_diag.get("recovery_stage") == "p106_1_non_barcode":
+                trace.apply_p106_1_from_diagnosis(gap_diag, gcd_path=gcd_path)
+                if gap_diag.get("recovery_stage") == P106_1_RECOVERY_STAGE:
                     trace.p106_called = True
                     block = gap_diag.get("recovery_block_reason") or gap_diag.get("recovery_reason")
                     if block:
@@ -894,7 +943,7 @@ def process_intake_item(session: Session, *, item_id: int) -> str:
 
             if candidate is None and _p106_reports_no_gcd_match(gap_diag):
                 if _gcd_has_exact_barcode_authority(gcd_path, normalized) or p106_gap_is_exact_barcode_authority(
-                    gap_diag
+                    gap_diag or {}
                 ):
                     if gap_diag:
                         sync_intake_display_from_p106_gap(item, gap_diag)
@@ -902,6 +951,14 @@ def process_intake_item(session: Session, *, item_id: int) -> str:
                     session.add(item)
                     session.flush()
                     return _finish(session, item, status=ITEM_NEEDS_REVIEW, reason=gap_reason)
+
+            if _should_call_comicvine_after_p106_pipeline(
+                gap_diag=gap_diag,
+                gcd_path=gcd_path,
+                normalized=normalized,
+                candidate=candidate,
+                p106_1_attempted=p106_1_attempted,
+            ):
                 trace.comicvine_fallback_called = True
                 candidate = _resolve_comicvine_candidate(session, barcode=normalized)
                 if p106_gap_is_exact_barcode_authority(gap_diag):
