@@ -29,6 +29,7 @@ ITEM_PROCESSING = "processing"
 ITEM_AUTO_MATCHED = "auto_matched"          # high-confidence exact match (learned map / catalog UPC)
 ITEM_READY_FOR_REVIEW = "ready_for_review"  # candidate found (e.g. ComicVine), needs confirm
 ITEM_NEEDS_REVIEW = "needs_review"          # ambiguous / no safe match
+ITEM_NEEDS_FULL_COVER_PHOTO = "needs_full_cover_photo"  # barcode read; need full cover for ID
 ITEM_FAILED = "failed"                      # could not read barcode / processing error
 ITEM_ADDED_TO_INVENTORY = "added_to_inventory"
 ITEM_REJECTED = "rejected"

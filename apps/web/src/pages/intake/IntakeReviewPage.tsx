@@ -16,6 +16,7 @@ import {
   type IntakeCounts,
   type IntakeItem,
   type IntakeReview,
+  uploadIntakeFullCoverPhoto,
 } from "../../api/intake";
 
 const COUNT_CARDS: {
@@ -30,6 +31,12 @@ const COUNT_CARDS: {
   { key: "auto_matched", label: "Auto matched", border: "border-l-teal-400", value: "text-teal-100" },
   { key: "ready_for_review", label: "Ready for review", border: "border-l-sky-400", value: "text-sky-100" },
   { key: "needs_review", label: "Needs review", border: "border-l-orange-400", value: "text-orange-100" },
+  {
+    key: "needs_full_cover_photo",
+    label: "Full cover",
+    border: "border-l-fuchsia-400",
+    value: "text-fuchsia-100",
+  },
   {
     key: "added_to_inventory",
     label: "Added to inventory",
@@ -76,7 +83,16 @@ type IntakeReviewCandidateRow = {
   import_ready?: boolean;
 };
 
+function intakeNeedsFullCoverPhoto(item: IntakeItem): boolean {
+  if (item.status === "needs_full_cover_photo") return true;
+  return item.barcode_read?.needs_full_cover_photo === true;
+}
+
+const FULL_COVER_PROMPT =
+  "Barcode was read, but no barcode record exists in GCD or your catalog. Take a full front-cover photo to identify by cover art.";
+
 function intakeFingerprintReviewCandidates(item: IntakeItem): IntakeReviewCandidateRow[] {
+  if (intakeNeedsFullCoverPhoto(item)) return [];
   const gap = intakeBarcodeGap(item);
   const tops = gap?.needs_review_top_candidates;
   if (Array.isArray(tops)) {
@@ -211,6 +227,7 @@ const STATUS_LABEL: Record<string, string> = {
   auto_matched: "Auto matched",
   ready_for_review: "Ready for review",
   needs_review: "Needs review",
+  needs_full_cover_photo: "Full cover photo",
   added_to_inventory: "Added to inventory",
   rejected: "Rejected",
   failed: "Failed",
@@ -224,7 +241,9 @@ function StatusBadge({ status }: { status: string }): JSX.Element {
         ? "bg-sky-600/25 text-sky-200"
         : status === "needs_review"
           ? "bg-orange-600/25 text-orange-200"
-          : status === "failed" || status === "rejected"
+          : status === "needs_full_cover_photo"
+            ? "bg-fuchsia-600/25 text-fuchsia-200"
+            : status === "failed" || status === "rejected"
             ? "bg-rose-600/25 text-rose-200"
             : "bg-slate-700/50 text-slate-300";
   const label =
@@ -245,6 +264,8 @@ export function IntakeReviewPage(): JSX.Element {
   const [pickerQuery, setPickerQuery] = useState("");
   const [pickerResults, setPickerResults] = useState<IntakeCatalogSearchResult[]>([]);
   const [pickerBusy, setPickerBusy] = useState(false);
+  const fullCoverInputRef = useRef<HTMLInputElement | null>(null);
+  const [fullCoverItemId, setFullCoverItemId] = useState<number | null>(null);
   const pollRef = useRef<number | null>(null);
 
   const load = useCallback(async () => {
@@ -397,7 +418,9 @@ export function IntakeReviewPage(): JSX.Element {
           const reviewable =
             item.status === "ready_for_review" ||
             item.status === "needs_review" ||
+            item.status === "needs_full_cover_photo" ||
             item.status === "auto_matched";
+          const needsFullCover = intakeNeedsFullCoverPhoto(item);
           const gap = intakeBarcodeGap(item);
           const gapAutoImport =
             gap?.action === "auto_import_available" || gap?.ready_to_auto_import === true;
@@ -483,7 +506,15 @@ export function IntakeReviewPage(): JSX.Element {
                     &amp; Accept when ready.
                   </p>
                 ) : null}
-                {intakeUserReason(item) ? (
+                {needsFullCover ? (
+                  <p
+                    className="mt-2 text-sm text-fuchsia-200/90"
+                    data-testid={`full-cover-prompt-${item.id}`}
+                  >
+                    {FULL_COVER_PROMPT}
+                  </p>
+                ) : null}
+                {intakeUserReason(item) && !needsFullCover ? (
                   <p className="mt-2 text-sm text-orange-200/90">{intakeUserReason(item)}</p>
                 ) : null}
                 {item.error ? <p className="mt-1 text-sm text-rose-300/90">{item.error}</p> : null}
@@ -532,6 +563,20 @@ export function IntakeReviewPage(): JSX.Element {
                         Add to inventory
                       </button>
                     ) : null}
+                    {needsFullCover ? (
+                      <button
+                        type="button"
+                        disabled={busy}
+                        data-testid={`full-cover-upload-${item.id}`}
+                        onClick={() => {
+                          setFullCoverItemId(item.id);
+                          fullCoverInputRef.current?.click();
+                        }}
+                        className="rounded-lg bg-fuchsia-700 px-3 py-1.5 text-xs font-semibold disabled:opacity-50"
+                      >
+                        Add full-cover photo
+                      </button>
+                    ) : null}
                     <button
                       type="button"
                       disabled={busy}
@@ -560,6 +605,21 @@ export function IntakeReviewPage(): JSX.Element {
           </p>
         ) : null}
       </div>
+
+      <input
+        ref={fullCoverInputRef}
+        type="file"
+        accept="image/*"
+        className="hidden"
+        data-testid="full-cover-file-input"
+        onChange={(e) => {
+          const file = e.target.files?.[0];
+          const id = fullCoverItemId;
+          e.target.value = "";
+          if (!file || id == null) return;
+          void runAction(id, () => uploadIntakeFullCoverPhoto(id, file));
+        }}
+      />
 
       {pickerItem ? (
         <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/70 p-4">

@@ -235,6 +235,10 @@ def attach_fingerprint_review_to_diagnosis(
     hints: IntakeGcdRecoveryHints,
     barcode: str,
 ) -> dict[str, Any]:
+    if diagnosis.get("needs_full_cover_photo"):
+        return {"top_candidates": [], "collapsed_family_count": 0, "single_family": False, "qualified_fingerprint_count": 0}
+    if not hints.fingerprint_region_safe:
+        return {"top_candidates": [], "collapsed_family_count": 0, "single_family": False, "qualified_fingerprint_count": 0}
     bundle = build_fingerprint_review_bundle(session, hints, limit=3)
     top = bundle["top_candidates"]
     if not top:
@@ -323,6 +327,9 @@ def persist_review_candidates_on_intake_item(
     add_candidate_fn: Any,
     clear_candidates_fn: Any,
 ) -> None:
+    if diagnosis.get("needs_full_cover_photo"):
+        clear_candidates_fn(session, item_id)
+        return
     tops = diagnosis.get("needs_review_top_candidates")
     if not isinstance(tops, list) or not tops:
         return

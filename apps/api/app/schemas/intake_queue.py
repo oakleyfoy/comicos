@@ -47,6 +47,7 @@ class IntakeCounts(BaseModel):
     auto_matched: int
     ready_for_review: int
     needs_review: int
+    needs_full_cover_photo: int
     added_to_inventory: int
     rejected: int
     failed: int

@@ -31,6 +31,7 @@ from app.models.intake_queue import (
     ComicIssueBarcode,
     ITEM_AUTO_MATCHED,
     ITEM_FAILED,
+    ITEM_NEEDS_FULL_COVER_PHOTO,
     ITEM_NEEDS_REVIEW,
     ITEM_PROCESSING,
     ITEM_READY_FOR_REVIEW,
@@ -315,6 +316,10 @@ def _pop_barcode_trace(item_id: int | None) -> ScannerBarcodeResolutionTrace | N
 
 
 def _scanner_gap_finish_reason(diagnosis: dict[str, Any]) -> str:
+    from app.services.intake_full_cover_followup_service import FULL_COVER_USER_MESSAGE
+
+    if diagnosis.get("needs_full_cover_photo"):
+        return FULL_COVER_USER_MESSAGE
     tops = diagnosis.get("needs_review_top_candidates")
     if isinstance(tops, list) and tops:
         if diagnosis.get("review_decision") == "needs_review_top_candidates":
@@ -340,6 +345,12 @@ def _apply_p106_diagnosis_to_intake_item(item: IntakeSessionItem, *, gap_diag: d
     )
 
     item.barcode_read_json = merge_barcode_gap_into_barcode_read(item.barcode_read_json, gap_diag)
+    from app.services.intake_full_cover_followup_service import merge_full_cover_flags_into_barcode_read
+
+    item.barcode_read_json = merge_full_cover_flags_into_barcode_read(
+        item.barcode_read_json,
+        gap_diag=gap_diag,
+    )
     apply_barcode_gap_display_to_intake_item(item, gap_diag)
 
 
@@ -567,7 +578,16 @@ def process_intake_item(session: Session, *, item_id: int) -> str:
             return _fail(session, item, "Captured image is missing from storage.")
         image_bytes = abs_path.read_bytes()
 
-        too_small, img_w, img_h, small_reason = recognition_image_too_small(image_bytes)
+        from app.services.intake_fingerprint_image_region_service import assess_fingerprint_image_region
+        from app.services.intake_full_cover_followup_service import resolve_intake_recognition_image_path
+
+        recognition_path, _using_full_cover_followup = resolve_intake_recognition_image_path(item, abs_path)
+        primary_region = assess_fingerprint_image_region(abs_path, image_bytes=image_bytes)
+        recognition_bytes = image_bytes
+        if recognition_path.resolve() != abs_path.resolve():
+            recognition_bytes = recognition_path.read_bytes()
+
+        too_small, img_w, img_h, small_reason = recognition_image_too_small(recognition_bytes)
         logger.info(
             "intake.item.image item_id=%s bytes=%s width=%s height=%s path=%s too_small=%s",
             item_id,
@@ -870,8 +890,8 @@ def process_intake_item(session: Session, *, item_id: int) -> str:
                     session,
                     item=item,
                     barcode=normalized,
-                    image_path=abs_path,
-                    image_bytes=image_bytes,
+                    image_path=recognition_path,
+                    image_bytes=recognition_bytes,
                     p105=p105,
                 )
                 logger.info(
@@ -885,8 +905,8 @@ def process_intake_item(session: Session, *, item_id: int) -> str:
                     barcode=normalized,
                     gcd_path=gcd_path,
                     cache_path=cache_path,
-                    image_path=abs_path,
-                    image_bytes=image_bytes,
+                    image_path=recognition_path,
+                    image_bytes=recognition_bytes,
                     prior_diagnosis=gap_diag or {},
                     p105=p105,
                     recovery_hints=recovery_hints,
@@ -1005,9 +1025,42 @@ def process_intake_item(session: Session, *, item_id: int) -> str:
 
             if candidate is None:
                 if gap_diag:
+                    from app.services.intake_full_cover_followup_service import (
+                        FULL_COVER_USER_MESSAGE,
+                        apply_full_cover_followup_to_diagnosis,
+                        intake_has_full_cover_followup_image,
+                        should_require_full_cover_followup,
+                    )
                     from app.services.p106_fingerprint_review_fallback_service import (
                         persist_review_candidates_on_intake_item,
                     )
+
+                    if should_require_full_cover_followup(
+                        gap_diag=gap_diag,
+                        primary_region=primary_region,
+                        has_full_cover_image=intake_has_full_cover_followup_image(item),
+                        local_catalog_hit=local_catalog_hit,
+                        p106_exact_barcode_authority=p106_exact_barcode_authority,
+                        barcode_decoded=bool(normalized),
+                    ):
+                        apply_full_cover_followup_to_diagnosis(gap_diag, primary_region)
+                        _clear_candidates(session, item_id)
+                        try:
+                            _apply_p106_diagnosis_to_intake_item(item, gap_diag=gap_diag)
+                        except Exception:
+                            logger.warning(
+                                "intake.full_cover_followup.display_failed item_id=%s",
+                                item_id,
+                                exc_info=True,
+                            )
+                        session.add(item)
+                        session.flush()
+                        return _finish(
+                            session,
+                            item,
+                            status=ITEM_NEEDS_FULL_COVER_PHOTO,
+                            reason=FULL_COVER_USER_MESSAGE,
+                        )
 
                     try:
                         persist_review_candidates_on_intake_item(

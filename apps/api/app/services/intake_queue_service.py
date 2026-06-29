@@ -27,6 +27,7 @@ from app.models.intake_queue import (
     ITEM_AUTO_MATCHED,
     ITEM_FAILED,
     ITEM_NEEDS_REVIEW,
+    ITEM_NEEDS_FULL_COVER_PHOTO,
     ITEM_PROCESSING,
     ITEM_QUEUED,
     ITEM_READY_FOR_REVIEW,
@@ -294,6 +295,7 @@ def intake_counts(session: Session, *, session_id: int) -> dict[str, int]:
     auto_matched = by_status.get(ITEM_AUTO_MATCHED, 0)
     ready = by_status.get(ITEM_READY_FOR_REVIEW, 0)
     needs = by_status.get(ITEM_NEEDS_REVIEW, 0)
+    needs_full_cover = by_status.get(ITEM_NEEDS_FULL_COVER_PHOTO, 0)
     added = by_status.get(ITEM_ADDED_TO_INVENTORY, 0)
     rejected = by_status.get(ITEM_REJECTED, 0)
     failed = by_status.get("failed", 0)
@@ -305,6 +307,7 @@ def intake_counts(session: Session, *, session_id: int) -> dict[str, int]:
         "auto_matched": auto_matched,
         "ready_for_review": ready,
         "needs_review": needs,
+        "needs_full_cover_photo": needs_full_cover,
         "added_to_inventory": added,
         "rejected": rejected,
         "failed": failed,
@@ -839,9 +842,28 @@ def reject_intake_item(session: Session, *, item_id: int, owner_user_id: int) ->
     return item
 
 
-def requeue_intake_item(session: Session, *, item_id: int, owner_user_id: int) -> IntakeSessionItem:
+def requeue_intake_item(
+    session: Session,
+    *,
+    item_id: int,
+    owner_user_id: int,
+    full_cover_required: bool = False,
+) -> IntakeSessionItem:
     """Rescan/reprocess an item from scratch."""
+    import json
+
     item = _load_owned_item(session, item_id=item_id, owner_user_id=owner_user_id)
+    if full_cover_required:
+        payload: dict = {}
+        if item.barcode_read_json:
+            try:
+                parsed = json.loads(item.barcode_read_json)
+                if isinstance(parsed, dict):
+                    payload = parsed
+            except json.JSONDecodeError:
+                payload = {}
+        payload["full_cover_required"] = True
+        item.barcode_read_json = json.dumps(payload)
     item.status = ITEM_QUEUED
     item.reason = None
     item.error = None
@@ -850,6 +872,62 @@ def requeue_intake_item(session: Session, *, item_id: int, owner_user_id: int) -
     session.commit()
     session.refresh(item)
     run_intake_item_async(int(item.id or 0))
+    return item
+
+
+async def attach_full_cover_photo_to_intake_item(
+    session: Session,
+    *,
+    item_id: int,
+    owner_user_id: int,
+    upload: UploadFile,
+) -> IntakeSessionItem:
+    """Store a full front-cover follow-up image and reprocess the intake item."""
+    import json
+
+    from app.services.intake_full_cover_followup_service import full_cover_storage_path_for_primary
+
+    item = _load_owned_item(session, item_id=item_id, owner_user_id=owner_user_id)
+    if not upload.content_type or not upload.content_type.startswith("image/"):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Upload must be an image")
+    raw = await upload.read()
+    if len(raw) > MAX_FILE_BYTES:
+        raise HTTPException(status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE, detail="Image too large")
+    too_small, _, _, small_reason = recognition_image_too_small(raw)
+    if too_small:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=small_reason or "Image too small")
+
+    primary = resolve_photo_import_storage_path(item.storage_path, image_id=int(item.id or 0))
+    if not primary.is_file():
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Primary scan image missing")
+
+    dest = full_cover_storage_path_for_primary(primary)
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    dest.write_bytes(raw)
+    rel = relative_path_under_repo_root(dest)
+
+    payload: dict = {}
+    if item.barcode_read_json:
+        try:
+            parsed = json.loads(item.barcode_read_json)
+            if isinstance(parsed, dict):
+                payload = parsed
+        except json.JSONDecodeError:
+            payload = {}
+    payload["full_cover_storage_path"] = rel
+    payload["full_cover_required"] = False
+    payload.pop("needs_full_cover_photo", None)
+
+    item.barcode_read_json = json.dumps(payload)
+    item.status = ITEM_QUEUED
+    item.reason = None
+    item.error = None
+    item.confidence = 0.0
+    session.add(item)
+    session.commit()
+    session.refresh(item)
+    run_intake_item_async(int(item.id or 0))
+    logger.info("intake.full_cover.attached item_id=%s path=%s", item.id, rel)
     return item
 
 

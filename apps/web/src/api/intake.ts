@@ -58,6 +58,7 @@ export type IntakeCounts = {
   auto_matched: number;
   ready_for_review: number;
   needs_review: number;
+  needs_full_cover_photo: number;
   added_to_inventory: number;
   rejected: number;
   failed: number;
@@ -216,8 +217,21 @@ export function rejectIntakeItem(itemId: number): Promise<IntakeItem> {
   return requestIntake<IntakeItem>(`/api/v1/intake/items/${itemId}/reject`, { method: "POST" });
 }
 
-export function requeueIntakeItem(itemId: number): Promise<IntakeItem> {
-  return requestIntake<IntakeItem>(`/api/v1/intake/items/${itemId}/requeue`, { method: "POST" });
+export function requeueIntakeItem(itemId: number, fullCoverRequired?: boolean): Promise<IntakeItem> {
+  const query =
+    fullCoverRequired === true ? "?full_cover_required=true" : "";
+  return requestIntake<IntakeItem>(`/api/v1/intake/items/${itemId}/requeue${query}`, {
+    method: "POST",
+  });
+}
+
+export async function uploadIntakeFullCoverPhoto(itemId: number, blob: Blob): Promise<IntakeItem> {
+  const form = new FormData();
+  form.append("file", blob, "full_cover.jpg");
+  return requestIntake<IntakeItem>(`/api/v1/intake/items/${itemId}/full-cover-photo`, {
+    method: "POST",
+    body: form,
+  });
 }
 
 export function addAllHighConfidence(

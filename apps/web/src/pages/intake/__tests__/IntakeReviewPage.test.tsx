@@ -36,6 +36,7 @@ const baseReview = {
     auto_matched: 1,
     ready_for_review: 1,
     needs_review: 0,
+    needs_full_cover_photo: 0,
     added_to_inventory: 0,
     rejected: 0,
     failed: 0,
@@ -157,5 +158,24 @@ describe("IntakeReviewPage", () => {
     fireEvent.click(screen.getByRole("button", { name: "Search" }));
     fireEvent.click(await screen.findByRole("button", { name: /Superman #39 DC Comics/ }));
     await waitFor(() => expect(chooseSpy).toHaveBeenCalledWith(11, 900));
+  });
+
+  it("shows full-cover prompt and upload button", async () => {
+    vi.spyOn(intake, "getIntakeReview").mockResolvedValue({
+      ...baseReview,
+      counts: { ...baseReview.counts, needs_full_cover_photo: 1 },
+      items: [
+        {
+          ...baseReview.items[0],
+          id: 42,
+          status: "needs_full_cover_photo",
+          barcode_read: { needs_full_cover_photo: true },
+          candidates: [],
+        },
+      ],
+    });
+    renderReview();
+    expect(await screen.findByTestId("full-cover-prompt-42")).toBeInTheDocument();
+    expect(screen.getByTestId("full-cover-upload-42")).toHaveTextContent("Add full-cover photo");
   });
 });

@@ -46,6 +46,7 @@ from app.services.intake_queue_service import (
     requeue_intake_item,
     search_catalog_issues,
     set_session_status,
+    attach_full_cover_photo_to_intake_item,
 )
 from app.services.photo_import_storage_service import resolve_photo_import_storage_path
 from app.services.barcode_scan_consensus_service import suggest_corrected_barcode
@@ -337,10 +338,32 @@ def reject_item_endpoint(
 @intake_router.post("/items/{item_id}/requeue", response_model=IntakeItemRead)
 def requeue_item_endpoint(
     item_id: int,
+    full_cover_required: bool = False,
     session: Session = Depends(get_session),
     current_user: User = Depends(get_current_user),
 ) -> IntakeItemRead:
-    item = requeue_intake_item(session, item_id=item_id, owner_user_id=int(current_user.id))
+    item = requeue_intake_item(
+        session,
+        item_id=item_id,
+        owner_user_id=int(current_user.id),
+        full_cover_required=full_cover_required,
+    )
+    return _item_response(session, item)
+
+
+@intake_router.post("/items/{item_id}/full-cover-photo", response_model=IntakeItemRead)
+async def full_cover_photo_endpoint(
+    item_id: int,
+    file: UploadFile = File(...),
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> IntakeItemRead:
+    item = await attach_full_cover_photo_to_intake_item(
+        session,
+        item_id=item_id,
+        owner_user_id=int(current_user.id),
+        upload=file,
+    )
     return _item_response(session, item)
 
 

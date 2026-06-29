@@ -125,6 +125,9 @@ class IntakeGcdRecoveryHints:
     fingerprint_candidate_gcd_issue_id: int | None = None
     fingerprint_confidence: float | None = None
     fingerprint_match_source: str | None = None
+    fingerprint_image_region: str = "unknown"
+    fingerprint_region_safe: bool = True
+    fingerprint_suppressed_reason: str | None = None
 
 
 def _qualified_fingerprint_candidates(
@@ -327,7 +330,12 @@ def gather_intake_gcd_recovery_hints(
     series_norm = normalize_series_name(series) if series else ""
     aliases = _series_norm_aliases(series_norm) if series_norm and has_reliable_series_hint(series) else []
 
-    fingerprint_candidates = _resolve_fingerprint_recovery_candidates(session, image_path=image_path)
+    from app.services.intake_fingerprint_image_region_service import assess_fingerprint_image_region
+
+    region = assess_fingerprint_image_region(image_path, image_bytes=image_bytes)
+    fingerprint_candidates: list[FingerprintRecoveryCandidate] = []
+    if region.fingerprint_region_safe:
+        fingerprint_candidates = _resolve_fingerprint_recovery_candidates(session, image_path=image_path)
     fp_catalog_id, fp_gcd_id, fp_conf, fp_source = _primary_fingerprint_fields(fingerprint_candidates)
 
     return IntakeGcdRecoveryHints(
@@ -349,6 +357,9 @@ def gather_intake_gcd_recovery_hints(
         fingerprint_candidate_gcd_issue_id=fp_gcd_id,
         fingerprint_confidence=fp_conf,
         fingerprint_match_source=fp_source,
+        fingerprint_image_region=region.fingerprint_image_region,
+        fingerprint_region_safe=region.fingerprint_region_safe,
+        fingerprint_suppressed_reason=region.fingerprint_suppressed_reason,
     )
 
 
@@ -949,6 +960,9 @@ def _recovery_hints_payload(hints: IntakeGcdRecoveryHints) -> dict[str, Any]:
         "fingerprint_candidate_gcd_issue_id": hints.fingerprint_candidate_gcd_issue_id,
         "fingerprint_confidence": hints.fingerprint_confidence,
         "fingerprint_match_source": hints.fingerprint_match_source,
+        "fingerprint_image_region": hints.fingerprint_image_region,
+        "fingerprint_region_safe": hints.fingerprint_region_safe,
+        "fingerprint_suppressed_reason": hints.fingerprint_suppressed_reason,
     }
 
 
@@ -1005,8 +1019,23 @@ def _finalize_p106_1_diagnosis_with_fingerprint_review(
     hints: IntakeGcdRecoveryHints,
     barcode: str,
 ) -> dict[str, Any]:
+    from app.services.intake_fingerprint_image_region_service import (
+        FingerprintRegionAssessment,
+        merge_fingerprint_region_instrumentation,
+    )
     from app.services.p106_fingerprint_review_fallback_service import attach_fingerprint_review_to_diagnosis
 
+    merge_fingerprint_region_instrumentation(
+        base,
+        FingerprintRegionAssessment(
+            fingerprint_image_region=hints.fingerprint_image_region,
+            fingerprint_region_safe=hints.fingerprint_region_safe,
+            fingerprint_suppressed_reason=hints.fingerprint_suppressed_reason,
+        ),
+    )
+    if not hints.fingerprint_region_safe:
+        base.pop("needs_review_top_candidates", None)
+        return base
     attach_fingerprint_review_to_diagnosis(session, base, hints=hints, barcode=barcode)
     return base
 
