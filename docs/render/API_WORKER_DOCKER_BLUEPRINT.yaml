@@ -15,7 +15,7 @@ services:
     rootDir: apps/api
     dockerfilePath: apps/api/Dockerfile
     dockerContext: apps/api
-    healthCheckPath: /health
+    healthCheckPath: /healthz
     # Default Dockerfile CMD already runs scripts/render_web_start.py
     # (alembic upgrade head -> uvicorn). No dockerCommand override needed.
     envVars:

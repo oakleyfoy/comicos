@@ -44,7 +44,7 @@ Dashboard → **New** → **Web Service** → repo `oakleyfoy/comicos`, branch `
 | **Dockerfile Path** | `./Dockerfile` (relative to root directory — **not** `apps/api/Dockerfile`) |
 | **Docker Build Context Directory** | `.` (default) |
 | **Region / plan** | Match `comic-os-api` (Ohio, **Standard**) |
-| **Health Check Path** | Same as old API (Settings → Health Checks; often `/health`) |
+| **Health Check Path** | `/healthz` (Settings → Health Checks) |
 
 Default container command is the Dockerfile `CMD`:
 
@@ -152,7 +152,7 @@ Only after D and E pass on the **docker** service temp URL:
 2. **Remove** `api.comicosapp.com` from old `comic-os-api` (or move domain per Render UI)
 3. Wait until certificate shows **Verified** / active
 4. Confirm frontend still uses `https://api.comicosapp.com` (unchanged URL for users)
-5. Smoke-test: `curl -s https://api.comicosapp.com/health`
+5. Smoke-test: `curl -s https://api.comicosapp.com/healthz`
 6. **Suspend** (do not delete) old `comic-os-api` only after the docker service serves the domain
 
 Keep `comic-os-worker` on native Python unless you have another reason to migrate it.
@@ -173,7 +173,7 @@ OCR will be unavailable again on intake until the Docker API is back on the doma
 
 Use this after cutover (or on the docker service before cutover):
 
-- [ ] API boots without crash; `GET /health` returns OK
+- [ ] API boots without crash; `GET /healthz` and `GET /` return 200
 - [ ] Startup logs include `ocr.tesseract.startup` and `intake.runtime.startup` with  
       `TESSERACT_CMD='/usr/bin/tesseract'`, `resolved='/usr/bin/tesseract'`,  
       `tesseract_version='tesseract 5.x.x'`

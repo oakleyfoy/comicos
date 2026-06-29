@@ -1,6 +1,32 @@
 from fastapi.testclient import TestClient
 
 
+def test_root_get_returns_ok(client: TestClient) -> None:
+    response = client.get("/")
+
+    assert response.status_code == 200
+    assert response.json() == {"status": "ok", "service": "comic-os-api"}
+
+
+def test_root_head_returns_ok(client: TestClient) -> None:
+    response = client.head("/")
+
+    assert response.status_code == 200
+
+
+def test_healthz_get_returns_ok(client: TestClient) -> None:
+    response = client.get("/healthz")
+
+    assert response.status_code == 200
+    assert response.json() == {"ok": True}
+
+
+def test_healthz_head_returns_ok(client: TestClient) -> None:
+    response = client.head("/healthz")
+
+    assert response.status_code == 200
+
+
 def test_health_returns_ok(client: TestClient) -> None:
     response = client.get("/health")
 

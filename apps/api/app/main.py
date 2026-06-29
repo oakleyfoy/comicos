@@ -1686,8 +1686,25 @@ def _reports_attachment_response(body: bytes | str, *, media_type: str, stem: st
     )
 
 
+_ROOT_OK: dict[str, str] = {"status": "ok", "service": "comic-os-api"}
+
+
+@app.get("/")
+@app.head("/")
+def root() -> dict[str, str]:
+    """Render Docker port detection probes GET/HEAD /; must not 404."""
+    return _ROOT_OK
+
+
 @app.get("/health")
 def health() -> dict[str, bool]:
+    return {"ok": True}
+
+
+@app.get("/healthz")
+@app.head("/healthz")
+def healthz() -> dict[str, bool]:
+    """Lightweight liveness probe for Render health checks."""
     return {"ok": True}
 
 
