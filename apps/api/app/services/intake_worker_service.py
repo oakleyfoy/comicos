@@ -315,6 +315,13 @@ def _pop_barcode_trace(item_id: int | None) -> ScannerBarcodeResolutionTrace | N
 
 
 def _scanner_gap_finish_reason(diagnosis: dict[str, Any]) -> str:
+    tops = diagnosis.get("needs_review_top_candidates")
+    if isinstance(tops, list) and tops:
+        if diagnosis.get("review_decision") == "needs_review_top_candidates":
+            return "Cover fingerprint suggests catalog match(es) — review top candidates or use Import & Accept."
+    cv = diagnosis.get("comicvine_review_candidate")
+    if isinstance(cv, dict) and cv.get("import_ready"):
+        return "ComicVine and cover fingerprint agree — use Import & Accept to add to your catalog."
     if diagnosis.get("ready_to_auto_import"):
         return "Not in your catalog yet — GCD match found (Import & Accept to add)."
     if diagnosis.get("status") in {"review_required", "conflict"}:
@@ -960,11 +967,63 @@ def process_intake_item(session: Session, *, item_id: int) -> str:
                 p106_1_attempted=p106_1_attempted,
             ):
                 trace.comicvine_fallback_called = True
-                candidate = _resolve_comicvine_candidate(session, barcode=normalized)
+                cv_candidate = _resolve_comicvine_candidate(session, barcode=normalized)
                 if p106_gap_is_exact_barcode_authority(gap_diag):
-                    candidate = None
+                    cv_candidate = None
+                if gap_diag and cv_candidate is not None:
+                    from app.services.p106_1_gcd_non_barcode_recovery_service import IntakeGcdRecoveryHints
+                    from app.services.p106_fingerprint_review_fallback_service import (
+                        enhance_diagnosis_with_comicvine_fingerprint_consensus,
+                    )
+
+                    rh = gap_diag.get("recovery_hints") if isinstance(gap_diag.get("recovery_hints"), dict) else {}
+                    hints_for_cv = IntakeGcdRecoveryHints(
+                        publisher=rh.get("publisher") or item.matched_publisher,
+                        series=rh.get("series") or item.matched_series,
+                        issue_number=rh.get("issue_number") or item.matched_issue_number,
+                        year=rh.get("year"),
+                        ocr_title=rh.get("ocr_title"),
+                        ocr_issue_number=rh.get("ocr_issue_number"),
+                        ocr_publisher=rh.get("ocr_publisher"),
+                        fingerprint_confidence=rh.get("fingerprint_confidence"),
+                    )
+                    enhance_diagnosis_with_comicvine_fingerprint_consensus(
+                        gap_diag,
+                        hints=hints_for_cv,
+                        barcode=normalized,
+                        comicvine_candidate=cv_candidate,
+                    )
+                    try:
+                        _apply_p106_diagnosis_to_intake_item(item, gap_diag=gap_diag)
+                    except Exception:
+                        logger.warning(
+                            "intake.comicvine_fingerprint.display_failed item_id=%s",
+                            item_id,
+                            exc_info=True,
+                        )
+                candidate = cv_candidate
 
             if candidate is None:
+                if gap_diag:
+                    from app.services.p106_fingerprint_review_fallback_service import (
+                        persist_review_candidates_on_intake_item,
+                    )
+
+                    try:
+                        persist_review_candidates_on_intake_item(
+                            session,
+                            item_id=int(item.id or 0),
+                            diagnosis=gap_diag,
+                            add_candidate_fn=_add_candidate,
+                            clear_candidates_fn=_clear_candidates,
+                        )
+                        _apply_p106_diagnosis_to_intake_item(item, gap_diag=gap_diag)
+                    except Exception:
+                        logger.warning(
+                            "intake.fingerprint_review.persist_failed item_id=%s",
+                            item_id,
+                            exc_info=True,
+                        )
                 gap_reason = _scanner_gap_finish_reason(gap_diag or {})
                 session.add(item)
                 session.flush()

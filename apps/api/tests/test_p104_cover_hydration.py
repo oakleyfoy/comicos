@@ -10,7 +10,15 @@ from PIL import Image
 from sqlmodel import Session, func, select
 
 from app.models.catalog_master import CatalogImage, CatalogIssue, CatalogPublisher, CatalogSeries
-from app.models.catalog_cover_assets import CatalogCoverAsset, COVER_ASSET_STATUS_COMPLETE
+from app.models.catalog_cover_assets import (
+    CatalogCoverAsset,
+    CatalogCoverHydrationRun,
+    COVER_ASSET_STATUS_COMPLETE,
+    COVER_ASSET_STATUS_DOWNLOADING,
+    COVER_ASSET_STATUS_PENDING,
+    HYDRATION_RUN_STATUS_FAILED,
+    HYDRATION_RUN_STATUS_RUNNING,
+)
 from app.services.p104_cover_hydration_service import (
     _comicvine_cover_from_external_ids,
     _preload_cover_urls_by_issue,
@@ -346,3 +354,52 @@ def test_reconcile_marks_complete_when_files_exist(session: Session, tmp_path: P
     assert asset.status == COVER_ASSET_STATUS_COMPLETE
     assert asset.last_hydration_run_id == run_id
     assert report["repaired_count"] >= 1
+
+
+def test_mark_stale_run_interrupted_preserves_complete(session: Session) -> None:
+    _seed_issue_with_cover(session, 2)
+    sync_cover_assets_batch(session, sync_limit=2)
+    session.commit()
+    assets = list(session.exec(select(CatalogCoverAsset)).all())
+    assert len(assets) >= 2
+    complete_asset, downloading_asset = assets[0], assets[1]
+
+    run = CatalogCoverHydrationRun(mode="hydrate", limit=2, status=HYDRATION_RUN_STATUS_RUNNING, queued=2)
+    session.add(run)
+    session.commit()
+    run_id = int(run.id or 0)
+
+    complete_asset.status = COVER_ASSET_STATUS_COMPLETE
+    complete_asset.last_hydration_run_id = run_id
+    downloading_asset.status = COVER_ASSET_STATUS_DOWNLOADING
+    downloading_asset.last_hydration_run_id = run_id
+    session.add(complete_asset)
+    session.add(downloading_asset)
+    session.commit()
+
+    from app.services.p104_cover_hydration_service import mark_p104_hydration_run_interrupted
+
+    report = mark_p104_hydration_run_interrupted(session, run_id, dry_run=False)
+    session.refresh(run)
+    session.refresh(complete_asset)
+    session.refresh(downloading_asset)
+
+    assert report["skipped"] is False
+    assert report["complete_assets_unchanged"] == 1
+    assert complete_asset.status == COVER_ASSET_STATUS_COMPLETE
+    assert downloading_asset.status == COVER_ASSET_STATUS_PENDING
+    assert run.status == HYDRATION_RUN_STATUS_FAILED
+    assert run.finished_at is not None
+    assert run.completed == 1
+
+
+def test_mark_stale_run_skips_non_running(session: Session) -> None:
+    run = CatalogCoverHydrationRun(mode="hydrate", limit=1, status=HYDRATION_RUN_STATUS_FAILED, queued=1)
+    session.add(run)
+    session.commit()
+    run_id = int(run.id or 0)
+
+    from app.services.p104_cover_hydration_service import mark_p104_hydration_run_interrupted
+
+    report = mark_p104_hydration_run_interrupted(session, run_id, dry_run=False)
+    assert report.get("skipped") is True

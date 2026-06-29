@@ -65,6 +65,43 @@ function intakeBarcodeGap(item: IntakeItem): Record<string, unknown> | null {
   return gap && typeof gap === "object" ? (gap as Record<string, unknown>) : null;
 }
 
+type IntakeReviewCandidateRow = {
+  series?: string | null;
+  title?: string | null;
+  issue_number?: string | null;
+  publisher?: string | null;
+  confidence?: number;
+  source?: string;
+  cover_url?: string | null;
+  import_ready?: boolean;
+};
+
+function intakeFingerprintReviewCandidates(item: IntakeItem): IntakeReviewCandidateRow[] {
+  const gap = intakeBarcodeGap(item);
+  const tops = gap?.needs_review_top_candidates;
+  if (Array.isArray(tops)) {
+    return tops.slice(0, 3).filter((row): row is IntakeReviewCandidateRow => row && typeof row === "object");
+  }
+  return item.candidates
+    .filter((c) => c.source === "fingerprint")
+    .slice(0, 3)
+    .map((c) => ({
+      series: c.series,
+      issue_number: c.issue_number,
+      publisher: c.publisher,
+      confidence: c.score / 100,
+      source: "fingerprint",
+      cover_url: c.cover_url,
+    }));
+}
+
+function intakeComicvineReviewCandidate(item: IntakeItem): IntakeReviewCandidateRow | null {
+  const gap = intakeBarcodeGap(item);
+  const cv = gap?.comicvine_review_candidate;
+  if (!cv || typeof cv !== "object") return null;
+  return cv as IntakeReviewCandidateRow;
+}
+
 function intakeHeadline(item: IntakeItem): string {
   const gap = intakeBarcodeGap(item);
   const gapSeries = typeof gap?.gcd_series === "string" ? gap.gcd_series.trim() : "";
@@ -72,12 +109,20 @@ function intakeHeadline(item: IntakeItem): string {
   const gapAuthoritative =
     gap?.action === "auto_import_available" ||
     (typeof gap?.gcd_match_count === "number" && gap.gcd_match_count === 1);
+  const fpTop = intakeFingerprintReviewCandidates(item)[0];
+  const seriesFromFp =
+    typeof fpTop?.series === "string"
+      ? fpTop.series.trim()
+      : typeof fpTop?.title === "string"
+        ? fpTop.title.trim()
+        : "";
+  const numFromFp = typeof fpTop?.issue_number === "string" ? fpTop.issue_number.trim() : "";
   const series = gapAuthoritative
-    ? gapSeries || item.matched_series?.trim() || ""
-    : item.matched_series?.trim() || gapSeries;
+    ? gapSeries || item.matched_series?.trim() || seriesFromFp
+    : item.matched_series?.trim() || gapSeries || seriesFromFp;
   const num = gapAuthoritative
-    ? gapNum || item.matched_issue_number?.trim() || ""
-    : item.matched_issue_number?.trim() || gapNum;
+    ? gapNum || item.matched_issue_number?.trim() || numFromFp
+    : item.matched_issue_number?.trim() || gapNum || numFromFp;
   if (series) {
     return [series, num ? `#${num.replace(/^#/, "")}` : null].filter(Boolean).join(" ");
   }
@@ -356,6 +401,8 @@ export function IntakeReviewPage(): JSX.Element {
           const gap = intakeBarcodeGap(item);
           const gapAutoImport =
             gap?.action === "auto_import_available" || gap?.ready_to_auto_import === true;
+          const fpCandidates = intakeFingerprintReviewCandidates(item);
+          const cvReview = intakeComicvineReviewCandidate(item);
           const canImport =
             !canConfirm &&
             reviewable &&
@@ -403,7 +450,37 @@ export function IntakeReviewPage(): JSX.Element {
                 ) : null}
                 {gapAutoImport && !canConfirm ? (
                   <p className="mt-2 text-sm text-indigo-200/90">
-                    GCD barcode match — use Import &amp; Accept to add to your catalog.
+                    {cvReview?.import_ready
+                      ? "ComicVine candidate — use Import & Accept to add to your catalog."
+                      : "GCD barcode match — use Import & Accept to add to your catalog."}
+                  </p>
+                ) : null}
+                {fpCandidates.length > 0 ? (
+                  <ul className="mt-2 space-y-1.5" data-testid={`fp-candidates-${item.id}`}>
+                    {fpCandidates.map((row, idx) => (
+                      <li
+                        key={`${row.series}-${row.issue_number}-${idx}`}
+                        className="rounded-md border border-slate-700/80 bg-slate-950/40 px-2 py-1.5 text-xs text-slate-300"
+                      >
+                        <span className="font-semibold text-slate-100">
+                          {row.series || row.title || "Series unknown"}
+                          {row.issue_number ? ` #${String(row.issue_number).replace(/^#/, "")}` : ""}
+                        </span>
+                        {row.publisher ? <span className="text-slate-400"> · {row.publisher}</span> : null}
+                        {row.confidence != null ? (
+                          <span className="text-slate-500">
+                            {" "}
+                            · {(Number(row.confidence) * 100).toFixed(0)}% · Fingerprint
+                          </span>
+                        ) : null}
+                      </li>
+                    ))}
+                  </ul>
+                ) : null}
+                {cvReview && !gapAutoImport ? (
+                  <p className="mt-2 text-sm text-violet-200/90" data-testid={`cv-candidate-${item.id}`}>
+                    ComicVine candidate: {cvReview.series ?? cvReview.title} #{cvReview.issue_number ?? "?"} — Import
+                    &amp; Accept when ready.
                   </p>
                 ) : null}
                 {intakeUserReason(item) ? (

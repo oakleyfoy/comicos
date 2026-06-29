@@ -700,6 +700,8 @@ def resolve_barcode_gaps_from_scanner_queue(
 
 def barcode_gap_action_from_diagnosis(diagnosis: dict[str, Any]) -> str | None:
     if diagnosis.get("ready_to_auto_import"):
+        if diagnosis.get("import_path") == "comicvine_fingerprint_consensus":
+            return "auto_import_available"
         return "auto_import_available"
     status = diagnosis.get("status")
     if status in {P106_STATUS_REVIEW_REQUIRED, P106_STATUS_CONFLICT}:
@@ -803,6 +805,16 @@ def barcode_gap_payload_from_diagnosis(diagnosis: dict[str, Any]) -> dict[str, A
         "gcd_publisher": _gcd_display_publisher(diagnosis),
     }
     payload.update(_p106_1_observability_from_diagnosis(diagnosis))
+    tops = diagnosis.get("needs_review_top_candidates")
+    if isinstance(tops, list):
+        payload["needs_review_top_candidates"] = tops[:3]
+    if diagnosis.get("review_decision"):
+        payload["review_decision"] = diagnosis.get("review_decision")
+    cv_review = diagnosis.get("comicvine_review_candidate")
+    if isinstance(cv_review, dict):
+        payload["comicvine_review_candidate"] = cv_review
+    if diagnosis.get("import_path"):
+        payload["import_path"] = diagnosis.get("import_path")
     return payload
 
 
@@ -843,9 +855,20 @@ def _gcd_display_publisher(diagnosis: dict[str, Any]) -> str | None:
 
 
 def apply_barcode_gap_display_to_intake_item(item: Any, diagnosis: dict[str, Any]) -> None:
+    tops = diagnosis.get("needs_review_top_candidates")
+    primary: dict[str, Any] | None = None
+    if isinstance(tops, list) and tops and isinstance(tops[0], dict):
+        primary = tops[0]
     series = _gcd_display_series(diagnosis)
     issue_number = _gcd_display_issue_number(diagnosis)
     publisher = _gcd_display_publisher(diagnosis)
+    if primary:
+        if not series:
+            series = str(primary.get("series") or primary.get("title") or "").strip() or None
+        if not issue_number:
+            issue_number = str(primary.get("issue_number") or "").strip() or None
+        if not publisher:
+            publisher = str(primary.get("publisher") or "").strip() or None
     if series and not (item.matched_series or "").strip():
         item.matched_series = series
     if issue_number and not (item.matched_issue_number or "").strip():

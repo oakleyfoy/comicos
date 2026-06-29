@@ -1516,6 +1516,157 @@ def reconcile_p104_hydration_run(
     }
 
 
+INTERRUPT_REASON_STALE_RUNNING = "interrupted_stale_running"
+
+
+def _write_run_interrupt_log_note(run: CatalogCoverHydrationRun, reason: str) -> None:
+    if not run.log_path:
+        return
+    path = Path(run.log_path)
+    if not path.is_file():
+        return
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError):
+        data = {}
+    if not isinstance(data, dict):
+        data = {"prior_payload": data}
+    data["interrupted"] = True
+    data["interrupt_reason"] = reason
+    data["interrupted_at"] = utc_now().isoformat()
+    path.write_text(json.dumps(data, indent=2, default=str), encoding="utf-8")
+
+
+def mark_p104_hydration_run_interrupted(
+    session: Session,
+    run_id: int,
+    *,
+    dry_run: bool = False,
+    reset_downloading: bool = True,
+    reason: str = INTERRUPT_REASON_STALE_RUNNING,
+) -> dict[str, Any]:
+    """Close a stuck running hydration run after process kill/KeyboardInterrupt without touching complete assets."""
+    run = session.get(CatalogCoverHydrationRun, run_id)
+    if run is None:
+        raise ValueError(f"hydration run {run_id} not found")
+    if run.status != HYDRATION_RUN_STATUS_RUNNING or run.finished_at is not None:
+        return {
+            "run_id": run_id,
+            "skipped": True,
+            "reason": f"status={run.status} finished_at={run.finished_at}",
+            "dry_run": dry_run,
+        }
+
+    complete_before = session.exec(
+        select(CatalogCoverAsset).where(
+            CatalogCoverAsset.last_hydration_run_id == int(run_id),
+            CatalogCoverAsset.status == COVER_ASSET_STATUS_COMPLETE,
+        )
+    ).all()
+    complete_snapshot = {int(a.id or 0): a.status for a in complete_before if a.id}
+
+    downloading_rows = session.exec(
+        select(CatalogCoverAsset).where(
+            CatalogCoverAsset.last_hydration_run_id == int(run_id),
+            CatalogCoverAsset.status == COVER_ASSET_STATUS_DOWNLOADING,
+        )
+    ).all()
+    reset_ids: list[int] = []
+    if reset_downloading:
+        err_note = (reason or INTERRUPT_REASON_STALE_RUNNING)[:4000]
+        for asset in downloading_rows:
+            aid = int(asset.id or 0)
+            reset_ids.append(aid)
+            if dry_run:
+                continue
+            now = utc_now()
+            asset.status = COVER_ASSET_STATUS_PENDING
+            asset.last_error = err_note
+            asset.updated_at = now
+            session.add(asset)
+
+    if not dry_run and reset_ids:
+        session.commit()
+
+    if dry_run:
+        return {
+            "run_id": run_id,
+            "skipped": False,
+            "dry_run": True,
+            "would_mark_status": HYDRATION_RUN_STATUS_FAILED,
+            "downloading_reset_count": len(reset_ids),
+            "downloading_reset_ids_sample": reset_ids[:50],
+            "complete_assets_unchanged": len(complete_snapshot),
+        }
+
+    run = _sync_run_counters_from_assets(session, run_id)
+    run.status = HYDRATION_RUN_STATUS_FAILED
+    run.finished_at = utc_now()
+    session.add(run)
+    session.commit()
+    session.refresh(run)
+    _write_run_interrupt_log_note(run, reason)
+
+    return {
+        "run_id": run_id,
+        "skipped": False,
+        "dry_run": False,
+        "status": run.status,
+        "finished_at": run.finished_at,
+        "downloading_reset_count": len(reset_ids),
+        "downloading_reset_ids_sample": reset_ids[:50],
+        "complete_assets_unchanged": len(complete_snapshot),
+        "run_completed": int(run.completed),
+        "run_failed": int(run.failed),
+        "run_skipped_no_url": int(run.skipped_no_url),
+    }
+
+
+def mark_stale_p104_hydration_runs_interrupted(
+    session: Session,
+    *,
+    run_id: int | None = None,
+    dry_run: bool = False,
+    reset_downloading: bool = True,
+    reason: str = INTERRUPT_REASON_STALE_RUNNING,
+) -> dict[str, Any]:
+    if run_id is not None:
+        reports = [
+            mark_p104_hydration_run_interrupted(
+                session,
+                int(run_id),
+                dry_run=dry_run,
+                reset_downloading=reset_downloading,
+                reason=reason,
+            )
+        ]
+    else:
+        runs = session.exec(
+            select(CatalogCoverHydrationRun).where(
+                CatalogCoverHydrationRun.status == HYDRATION_RUN_STATUS_RUNNING,
+                CatalogCoverHydrationRun.finished_at.is_(None),
+            )
+        ).all()
+        reports = [
+            mark_p104_hydration_run_interrupted(
+                session,
+                int(r.id or 0),
+                dry_run=dry_run,
+                reset_downloading=reset_downloading,
+                reason=reason,
+            )
+            for r in runs
+            if r.id
+        ]
+    marked = [r for r in reports if not r.get("skipped")]
+    return {
+        "dry_run": dry_run,
+        "run_reports": reports,
+        "marked_count": len(marked),
+        "skipped_count": len(reports) - len(marked),
+    }
+
+
 def p104_dashboard_metrics(session: Session) -> dict[str, Any]:
     survey = survey_catalog_cover_queue(session)
     counts = asset_status_counts(session)

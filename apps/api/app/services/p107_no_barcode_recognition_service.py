@@ -406,6 +406,38 @@ def recognize_cover_without_barcode(
     confidence = float(best["score"]) if best else 0.0
     decision = decision_from_score(confidence)
 
+    fp_review: list[dict[str, Any]] = []
+    if fp_hits:
+        from app.services.p106_1_gcd_non_barcode_recovery_service import (
+            FingerprintRecoveryCandidate,
+            IntakeGcdRecoveryHints,
+        )
+        from app.services.p106_fingerprint_review_fallback_service import build_fingerprint_review_bundle
+
+        fp_candidates = [
+            FingerprintRecoveryCandidate(
+                catalog_issue_id=int(h.issue_id),
+                gcd_issue_id=None,
+                confidence=float(h.confidence),
+            )
+            for h in fp_hits
+        ]
+        hint_stub = IntakeGcdRecoveryHints(
+            publisher=signals.publisher_candidates[0] if signals.publisher_candidates else None,
+            series=signals.title_candidates[0] if signals.title_candidates else None,
+            issue_number=signals.issue_number_candidates[0] if signals.issue_number_candidates else None,
+            year=signals.year_candidates[0] if signals.year_candidates else None,
+            ocr_title=signals.title_candidates[0] if signals.title_candidates else None,
+            ocr_issue_number=signals.issue_number_candidates[0] if signals.issue_number_candidates else None,
+            ocr_publisher=signals.publisher_candidates[0] if signals.publisher_candidates else None,
+            fingerprint_candidates=fp_candidates,
+            fingerprint_confidence=float(fp_hits[0].confidence) if fp_hits else None,
+        )
+        bundle = build_fingerprint_review_bundle(session, hint_stub, limit=3)
+        fp_review = bundle.get("top_candidates") or []
+        if fp_review and decision == "needs_review":
+            decision = "needs_review_top_3"
+
     return {
         "barcode_detected": False,
         "detected_barcode": None,
@@ -416,6 +448,7 @@ def recognize_cover_without_barcode(
         "best_match": best,
         "confidence": confidence,
         "decision": decision,
+        "needs_review_top_candidates": fp_review[:3],
     }
 
 

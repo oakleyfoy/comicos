@@ -998,6 +998,19 @@ def _ocr_unavailable_instrumentation(hints: IntakeGcdRecoveryHints) -> dict[str,
     }
 
 
+def _finalize_p106_1_diagnosis_with_fingerprint_review(
+    session: Session,
+    base: dict[str, Any],
+    *,
+    hints: IntakeGcdRecoveryHints,
+    barcode: str,
+) -> dict[str, Any]:
+    from app.services.p106_fingerprint_review_fallback_service import attach_fingerprint_review_to_diagnosis
+
+    attach_fingerprint_review_to_diagnosis(session, base, hints=hints, barcode=barcode)
+    return base
+
+
 def diagnose_gcd_non_barcode_recovery(
     session: Session,
     *,
@@ -1015,9 +1028,9 @@ def diagnose_gcd_non_barcode_recovery(
     if int(prior_diagnosis.get("gcd_match_count") or 0) > 0:
         base["p106_1_skipped"] = True
         base["p106_1_skip_reason"] = "prior_p106_gcd_match_count_nonzero"
-        return base
+        return _finalize_p106_1_diagnosis_with_fingerprint_review(session, base, hints=hints, barcode=barcode)
     if prior_diagnosis.get("already_resolved"):
-        return base
+        return _finalize_p106_1_diagnosis_with_fingerprint_review(session, base, hints=hints, barcode=barcode)
     if not hints.issue_number or not hints.publisher:
         instrumentation = {
             "decision_reason": "insufficient_metadata",
@@ -1040,7 +1053,7 @@ def diagnose_gcd_non_barcode_recovery(
                 "p106_1_instrumentation": instrumentation,
             }
         )
-        return base
+        return _finalize_p106_1_diagnosis_with_fingerprint_review(session, base, hints=hints, barcode=barcode)
 
     candidates = _query_gcd_empty_barcode_candidates(gcd_path, issue_number=hints.issue_number)
     publisher_filtered = [
@@ -1086,7 +1099,7 @@ def diagnose_gcd_non_barcode_recovery(
                 "p106_1_instrumentation": instrumentation,
             }
         )
-        return base
+        return _finalize_p106_1_diagnosis_with_fingerprint_review(session, base, hints=hints, barcode=barcode)
 
     winner, ranked, pick_decision = _pick_unique_high_confidence_candidate(
         session,
@@ -1155,7 +1168,7 @@ def diagnose_gcd_non_barcode_recovery(
                 "gcd_match_count": 0,
             }
         )
-        return base
+        return _finalize_p106_1_diagnosis_with_fingerprint_review(session, base, hints=hints, barcode=barcode)
 
     if fingerprint_narrowed:
         allowed, fp_block = _fingerprint_only_auto_import_allowed(
@@ -1185,7 +1198,7 @@ def diagnose_gcd_non_barcode_recovery(
                     "gcd_non_barcode_ranked": ranked[:5],
                 }
             )
-            return base
+            return _finalize_p106_1_diagnosis_with_fingerprint_review(session, base, hints=hints, barcode=barcode)
 
     gcd_issue_id = int(winner["gcd_issue_id"])
     gcd_match = {
@@ -1244,7 +1257,7 @@ def diagnose_gcd_non_barcode_recovery(
                 "proposed_action": "auto_import",
             }
         )
-    return base
+    return _finalize_p106_1_diagnosis_with_fingerprint_review(session, base, hints=hints, barcode=barcode)
 
 
 def enrich_gap_diagnosis_with_gcd_non_barcode_recovery(
