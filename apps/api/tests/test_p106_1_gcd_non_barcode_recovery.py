@@ -15,7 +15,11 @@ from app.services.p106_barcode_gap_resolver_service import (
     P106_STATUS_REVIEW_REQUIRED,
     resolve_barcode_gap,
 )
+from app.models.catalog_master import CatalogIssue, CatalogPublisher, CatalogSeries
+from app.services.gcd_barcode_import_service import GCD_SOURCE
 from app.services.p106_1_gcd_non_barcode_recovery_service import (
+    FINGERPRINT_CONFLICT_WITH_POOL_REASON,
+    FingerprintRecoveryCandidate,
     IntakeGcdRecoveryHints,
     P106_1_IMPORT_REASON,
     P106_1_RECOVERY_STAGE,
@@ -512,3 +516,245 @@ def test_reliable_series_clear_winner_among_compatible_variants(session: Session
     )
     assert diag["ready_to_auto_import"] is True
     assert diag["gcd_issue_id"] == 88130
+
+
+def _hints_with_fingerprint(
+    *,
+    gcd_issue_id: int,
+    catalog_issue_id: int = 9001,
+    confidence: float = 0.9,
+    publisher: str = "Marvel",
+    issue_number: str = "1",
+    year: int = 2024,
+) -> IntakeGcdRecoveryHints:
+    fp = FingerprintRecoveryCandidate(
+        catalog_issue_id=catalog_issue_id,
+        gcd_issue_id=gcd_issue_id,
+        confidence=confidence,
+    )
+    return IntakeGcdRecoveryHints(
+        publisher=publisher,
+        series=None,
+        issue_number=issue_number,
+        year=year,
+        ocr_title=None,
+        ocr_issue_number=None,
+        ocr_publisher=None,
+        series_norm_aliases=[],
+        fingerprint_candidates=[fp],
+        fingerprint_candidate_catalog_issue_id=catalog_issue_id,
+        fingerprint_candidate_gcd_issue_id=gcd_issue_id,
+        fingerprint_confidence=confidence,
+        fingerprint_match_source=fp.match_source,
+    )
+
+
+def test_single_fingerprint_narrows_broad_marvel_issue_one_pool(session: Session, tmp_path: Path) -> None:
+    bc = "75960620629200111"
+    target_gcd = 88200
+    gcd_path = _gcd_db(
+        tmp_path,
+        rows=[
+            {"gcd_issue_id": target_gcd, "series": "X-Men", "number": "1", "barcode": None, "series_id": 1},
+            {"gcd_issue_id": 88201, "series": "Avengers", "number": "1", "barcode": None, "series_id": 2},
+        ],
+    )
+    hints = _hints_with_fingerprint(gcd_issue_id=target_gcd)
+    diag = diagnose_gcd_non_barcode_recovery(
+        session,
+        barcode=bc,
+        gcd_path=gcd_path,
+        cache_path=None,
+        hints=hints,
+        image_path=None,
+        prior_diagnosis={"gcd_match_count": 0, "normalized_barcode": bc},
+    )
+    inst = diag["p106_1_instrumentation"]
+    assert inst["scorable_candidate_count"] == 1
+    assert inst["fingerprint_candidate_used"] is True
+    assert inst["fingerprint_narrowed_candidate_count"] == 1
+    assert diag["ready_to_auto_import"] is True
+    assert diag["gcd_issue_id"] == target_gcd
+
+
+def test_fingerprint_resolves_catalog_issue_id_to_gcd(session: Session, tmp_path: Path) -> None:
+    bc = "75960620629200111"
+    target_gcd = 88210
+    gcd_path = _gcd_db(
+        tmp_path,
+        rows=[
+            {"gcd_issue_id": target_gcd, "series": "X-Men", "number": "1", "barcode": None, "series_id": 1},
+            {"gcd_issue_id": 88211, "series": "Avengers", "number": "1", "barcode": None, "series_id": 2},
+        ],
+    )
+    pub = CatalogPublisher(name="Marvel", normalized_name="marvel")
+    session.add(pub)
+    session.flush()
+    series = CatalogSeries(name="X-Men", normalized_name="x-men", publisher_id=pub.id, start_year=2024)
+    session.add(series)
+    session.flush()
+    catalog_issue = CatalogIssue(
+        series_id=int(series.id),
+        publisher_id=int(pub.id),
+        issue_number="1",
+        normalized_issue_number="1",
+        title="X-Men #1",
+        external_source_ids={GCD_SOURCE: {str(target_gcd): {}}},
+    )
+    session.add(catalog_issue)
+    session.commit()
+    catalog_id = int(catalog_issue.id)
+
+    fp = FingerprintRecoveryCandidate(
+        catalog_issue_id=catalog_id,
+        gcd_issue_id=None,
+        confidence=0.91,
+    )
+    hints = IntakeGcdRecoveryHints(
+        publisher="Marvel",
+        series=None,
+        issue_number="1",
+        year=2024,
+        ocr_title=None,
+        ocr_issue_number=None,
+        ocr_publisher=None,
+        fingerprint_candidates=[fp],
+        fingerprint_candidate_catalog_issue_id=catalog_id,
+        fingerprint_candidate_gcd_issue_id=None,
+        fingerprint_confidence=0.91,
+        fingerprint_match_source=fp.match_source,
+    )
+    diag = diagnose_gcd_non_barcode_recovery(
+        session,
+        barcode=bc,
+        gcd_path=gcd_path,
+        cache_path=None,
+        hints=hints,
+        image_path=None,
+        prior_diagnosis={"gcd_match_count": 0},
+    )
+    assert diag["p106_1_instrumentation"]["scorable_candidate_count"] == 1
+    assert diag["p106_1_instrumentation"]["fingerprint_candidate_used"] is True
+    assert diag["gcd_issue_id"] == target_gcd
+
+
+def test_fingerprint_outside_publisher_issue_pool_records_conflict(session: Session, tmp_path: Path) -> None:
+    bc = "75960620629200111"
+    gcd_path = _gcd_db(
+        tmp_path,
+        rows=[
+            {"gcd_issue_id": 88220, "series": "X-Men", "number": "1", "barcode": None, "series_id": 1},
+        ],
+    )
+    hints = _hints_with_fingerprint(gcd_issue_id=99999)
+    diag = diagnose_gcd_non_barcode_recovery(
+        session,
+        barcode=bc,
+        gcd_path=gcd_path,
+        cache_path=None,
+        hints=hints,
+        image_path=None,
+        prior_diagnosis={"gcd_match_count": 0},
+    )
+    inst = diag["p106_1_instrumentation"]
+    assert diag["recovery_block_reason"] == FINGERPRINT_CONFLICT_WITH_POOL_REASON
+    assert inst["fingerprint_candidate_outside_pool"] is True
+    assert inst["fingerprint_candidate_gcd_issue_id"] == 99999
+    assert inst["scorable_candidate_count"] == 0
+    assert diag["ready_to_auto_import"] is False
+
+
+def test_multiple_fingerprint_candidates_do_not_auto_narrow(session: Session, tmp_path: Path) -> None:
+    bc = "75960620629200111"
+    gcd_path = _gcd_db(
+        tmp_path,
+        rows=[
+            {"gcd_issue_id": 88230, "series": "X-Men", "number": "1", "barcode": None, "series_id": 1},
+            {"gcd_issue_id": 88231, "series": "Avengers", "number": "1", "barcode": None, "series_id": 2},
+        ],
+    )
+    hints = IntakeGcdRecoveryHints(
+        publisher="Marvel",
+        series=None,
+        issue_number="1",
+        year=2024,
+        ocr_title=None,
+        ocr_issue_number=None,
+        ocr_publisher=None,
+        fingerprint_candidates=[
+            FingerprintRecoveryCandidate(catalog_issue_id=1, gcd_issue_id=88230, confidence=0.9),
+            FingerprintRecoveryCandidate(catalog_issue_id=2, gcd_issue_id=88231, confidence=0.88),
+        ],
+    )
+    diag = diagnose_gcd_non_barcode_recovery(
+        session,
+        barcode=bc,
+        gcd_path=gcd_path,
+        cache_path=None,
+        hints=hints,
+        image_path=None,
+        prior_diagnosis={"gcd_match_count": 0},
+    )
+    inst = diag["p106_1_instrumentation"]
+    assert inst["fingerprint_conflict_reason"] == "multiple_fingerprint_candidates"
+    assert inst["scorable_candidate_count"] == 0
+    assert diag["recovery_block_reason"] == "insufficient_series_or_title_hint"
+
+
+def test_fingerprint_pts_only_for_matching_candidate(session: Session, tmp_path: Path) -> None:
+    hints = _hints_with_fingerprint(gcd_issue_id=88240)
+    row_match = {"gcd_issue_id": 88240, "publisher": "Marvel", "series": "X-Men", "issue_number": "1", "pub_year": 2024}
+    row_other = {"gcd_issue_id": 88241, "publisher": "Marvel", "series": "Avengers", "issue_number": "1", "pub_year": 2024}
+    _, match_breakdown = _score_candidate_breakdown(session, row=row_match, hints=hints, image_path=None)
+    _, other_breakdown = _score_candidate_breakdown(session, row=row_other, hints=hints, image_path=None)
+    assert match_breakdown["fingerprint_pts"] == 4.0
+    assert other_breakdown["fingerprint_pts"] == 0.0
+
+
+@patch("app.services.p106_1_gcd_non_barcode_recovery_service.search_catalog_fingerprint_hits_for_crop_path")
+def test_gather_hints_persists_single_fingerprint_fields(
+    mock_search: MagicMock,
+    session: Session,
+    tmp_path: Path,
+) -> None:
+    from app.services.photo_import_fingerprint_service import FingerprintCatalogHit
+
+    pub = CatalogPublisher(name="Marvel", normalized_name="marvel")
+    session.add(pub)
+    session.flush()
+    series = CatalogSeries(name="X-Men", normalized_name="x-men", publisher_id=pub.id, start_year=2024)
+    session.add(series)
+    session.flush()
+    catalog_issue = CatalogIssue(
+        series_id=int(series.id),
+        publisher_id=int(pub.id),
+        issue_number="1",
+        normalized_issue_number="1",
+        title="X-Men",
+        external_source_ids={GCD_SOURCE: {"88250": {}}},
+    )
+    session.add(catalog_issue)
+    session.commit()
+    crop = tmp_path / "crop.jpg"
+    crop.write_bytes(b"jpeg")
+    mock_search.return_value = [
+        FingerprintCatalogHit(
+            issue_id=int(catalog_issue.id),
+            score=92.0,
+            confidence=0.92,
+            min_hamming_distance=4,
+        )
+    ]
+    item = _FakeIntakeItem(matched_publisher="Marvel", matched_issue_number="1")
+    hints = gather_intake_gcd_recovery_hints(
+        session,
+        item=item,
+        normalized_barcode="75960620629200111",
+        image_path=crop,
+        image_bytes=None,
+        p105=None,
+    )
+    assert hints.fingerprint_candidate_catalog_issue_id == int(catalog_issue.id)
+    assert hints.fingerprint_candidate_gcd_issue_id == 88250
+    assert hints.fingerprint_confidence == pytest.approx(0.92)
+    assert hints.fingerprint_match_source is not None

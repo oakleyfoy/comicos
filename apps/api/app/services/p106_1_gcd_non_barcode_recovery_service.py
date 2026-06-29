@@ -45,6 +45,8 @@ _MIN_UNIQUE_SCORE = 10
 _SECOND_BEST_GAP = 3
 _FINGERPRINT_BOOST = 4
 _FINGERPRINT_MIN_CONFIDENCE = 0.82
+FINGERPRINT_CATALOG_MATCH_SOURCE = "catalog_image_fingerprint"
+FINGERPRINT_CONFLICT_WITH_POOL_REASON = "fingerprint_candidate_conflicts_with_barcode_issue_or_publisher"
 _GENERIC_SERIES_TOKENS = frozenset(
     {
         "marvel",
@@ -70,6 +72,14 @@ _STRONG_SINGLE_SERIES_TOKENS = frozenset(
     }
 )
 SeriesMatchState = str  # matched | mismatched | unavailable
+
+
+@dataclass(frozen=True)
+class FingerprintRecoveryCandidate:
+    catalog_issue_id: int
+    gcd_issue_id: int | None
+    confidence: float
+    match_source: str = FINGERPRINT_CATALOG_MATCH_SOURCE
 
 
 def has_reliable_series_hint(series_hint: str | None) -> bool:
@@ -110,6 +120,101 @@ class IntakeGcdRecoveryHints:
     raw_ocr_text_excerpt: str | None = None
     ocr_engine_available: bool = True
     ocr_error: str | None = None
+    fingerprint_candidates: list[FingerprintRecoveryCandidate] = field(default_factory=list)
+    fingerprint_candidate_catalog_issue_id: int | None = None
+    fingerprint_candidate_gcd_issue_id: int | None = None
+    fingerprint_confidence: float | None = None
+    fingerprint_match_source: str | None = None
+
+
+def _qualified_fingerprint_candidates(
+    candidates: list[FingerprintRecoveryCandidate],
+) -> list[FingerprintRecoveryCandidate]:
+    return [c for c in candidates if float(c.confidence) >= _FINGERPRINT_MIN_CONFIDENCE]
+
+
+def _fingerprint_candidate_payload(candidate: FingerprintRecoveryCandidate) -> dict[str, Any]:
+    return {
+        "catalog_issue_id": int(candidate.catalog_issue_id),
+        "gcd_issue_id": int(candidate.gcd_issue_id) if candidate.gcd_issue_id is not None else None,
+        "confidence": float(candidate.confidence),
+        "match_source": candidate.match_source,
+    }
+
+
+def _resolve_fingerprint_recovery_candidates(
+    session: Session,
+    *,
+    image_path: Path | None,
+) -> list[FingerprintRecoveryCandidate]:
+    if image_path is None or not image_path.is_file():
+        return []
+    hits = search_catalog_fingerprint_hits_for_crop_path(session, crop_path=image_path, limit=5)
+    out: list[FingerprintRecoveryCandidate] = []
+    for hit in hits:
+        catalog_issue_id = int(hit.issue_id)
+        issue = session.get(CatalogIssue, catalog_issue_id)
+        linked = extract_gcd_issue_id(issue.external_source_ids) if issue else None
+        out.append(
+            FingerprintRecoveryCandidate(
+                catalog_issue_id=catalog_issue_id,
+                gcd_issue_id=int(linked) if linked is not None else None,
+                confidence=float(hit.confidence),
+                match_source=FINGERPRINT_CATALOG_MATCH_SOURCE,
+            )
+        )
+    return out
+
+
+def _primary_fingerprint_fields(
+    candidates: list[FingerprintRecoveryCandidate],
+) -> tuple[int | None, int | None, float | None, str | None]:
+    qualified = _qualified_fingerprint_candidates(candidates)
+    if len(qualified) != 1:
+        return None, None, None, None
+    fp = qualified[0]
+    return (
+        int(fp.catalog_issue_id),
+        int(fp.gcd_issue_id) if fp.gcd_issue_id is not None else None,
+        float(fp.confidence),
+        fp.match_source,
+    )
+
+
+def _build_fingerprint_instrumentation(
+    hints: IntakeGcdRecoveryHints,
+    *,
+    extra: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    qualified = _qualified_fingerprint_candidates(hints.fingerprint_candidates)
+    payload: dict[str, Any] = {
+        "fingerprint_candidate_count": len(qualified),
+        "fingerprint_candidates": [
+            _fingerprint_candidate_payload(c) for c in hints.fingerprint_candidates[:5]
+        ],
+        "fingerprint_narrowed_candidate_count": 0,
+        "fingerprint_candidate_used": False,
+        "fingerprint_candidate_outside_pool": False,
+        "fingerprint_conflict_reason": None,
+    }
+    if hints.fingerprint_candidate_gcd_issue_id is not None:
+        payload["fingerprint_candidate_gcd_issue_id"] = int(hints.fingerprint_candidate_gcd_issue_id)
+    if extra:
+        payload.update(extra)
+    return payload
+
+
+def _resolve_target_gcd_for_fingerprint(
+    session: Session,
+    candidate: FingerprintRecoveryCandidate,
+) -> int | None:
+    if candidate.gcd_issue_id is not None:
+        return int(candidate.gcd_issue_id)
+    issue = session.get(CatalogIssue, int(candidate.catalog_issue_id))
+    if issue is None:
+        return None
+    linked = extract_gcd_issue_id(issue.external_source_ids)
+    return int(linked) if linked is not None else None
 
 
 def _gcd_barcode_column_empty(raw: Any) -> bool:
@@ -151,8 +256,6 @@ def gather_intake_gcd_recovery_hints(
     image_bytes: bytes | None,
     p105: Any,
 ) -> IntakeGcdRecoveryHints:
-    del session  # fingerprint uses session in separate helpers at call site
-
     publisher = (item.matched_publisher or "").strip() or None
     if not publisher:
         publisher = effective_publisher_for_barcode(normalized_barcode, None)
@@ -224,6 +327,9 @@ def gather_intake_gcd_recovery_hints(
     series_norm = normalize_series_name(series) if series else ""
     aliases = _series_norm_aliases(series_norm) if series_norm and has_reliable_series_hint(series) else []
 
+    fingerprint_candidates = _resolve_fingerprint_recovery_candidates(session, image_path=image_path)
+    fp_catalog_id, fp_gcd_id, fp_conf, fp_source = _primary_fingerprint_fields(fingerprint_candidates)
+
     return IntakeGcdRecoveryHints(
         publisher=publisher,
         series=series,
@@ -238,6 +344,11 @@ def gather_intake_gcd_recovery_hints(
         raw_ocr_text_excerpt=raw_ocr_excerpt,
         ocr_engine_available=ocr_engine_available,
         ocr_error=ocr_error,
+        fingerprint_candidates=fingerprint_candidates,
+        fingerprint_candidate_catalog_issue_id=fp_catalog_id,
+        fingerprint_candidate_gcd_issue_id=fp_gcd_id,
+        fingerprint_confidence=fp_conf,
+        fingerprint_match_source=fp_source,
     )
 
 
@@ -259,7 +370,7 @@ def build_p106_1_intake_hint_snapshot(
         image_bytes=image_bytes,
         p105=p105,
     )
-    fp_count = len(_fingerprint_gcd_issue_ids(session, image_path=image_path))
+    fp_count = len(_qualified_fingerprint_candidates(hints.fingerprint_candidates))
     snapshot = {
         "barcode": barcode,
         "intake_item_id": getattr(item, "id", None),
@@ -273,6 +384,10 @@ def build_p106_1_intake_hint_snapshot(
         "series_hint_reliable": has_reliable_series_hint(hints.series),
         "facsimile_or_reprint": hints.facsimile_or_reprint,
         "fingerprint_candidate_count": fp_count,
+        "fingerprint_candidate_catalog_issue_id": hints.fingerprint_candidate_catalog_issue_id,
+        "fingerprint_candidate_gcd_issue_id": hints.fingerprint_candidate_gcd_issue_id,
+        "fingerprint_confidence": hints.fingerprint_confidence,
+        "fingerprint_match_source": hints.fingerprint_match_source,
         "raw_ocr_text_excerpt": hints.raw_ocr_text_excerpt,
         "ocr_engine_available": hints.ocr_engine_available,
         "ocr_error": hints.ocr_error,
@@ -406,20 +521,24 @@ def _gcd_issue_ids_from_prior_diagnosis(prior_diagnosis: dict[str, Any]) -> set[
     return ids
 
 
-def _fingerprint_gcd_issue_ids(session: Session, *, image_path: Path | None) -> set[int]:
+def _fingerprint_gcd_issue_ids(
+    session: Session,
+    *,
+    image_path: Path | None,
+    hints: IntakeGcdRecoveryHints | None = None,
+) -> set[int]:
+    if hints is not None and hints.fingerprint_candidates:
+        return {
+            int(c.gcd_issue_id)
+            for c in _qualified_fingerprint_candidates(hints.fingerprint_candidates)
+            if c.gcd_issue_id is not None
+        }
     if image_path is None or not image_path.is_file():
         return set()
     out: set[int] = set()
-    hits = search_catalog_fingerprint_hits_for_crop_path(session, crop_path=image_path, limit=5)
-    for hit in hits:
-        if hit.confidence < _FINGERPRINT_MIN_CONFIDENCE:
-            continue
-        issue = session.get(CatalogIssue, int(hit.issue_id))
-        if issue is None:
-            continue
-        linked = extract_gcd_issue_id(issue.external_source_ids)
-        if linked is not None:
-            out.add(int(linked))
+    for candidate in _resolve_fingerprint_recovery_candidates(session, image_path=image_path):
+        if candidate.gcd_issue_id is not None:
+            out.add(int(candidate.gcd_issue_id))
     return out
 
 
@@ -437,12 +556,53 @@ def _has_secondary_scoring_discriminator(
         return True
     if has_reliable_series_hint(hints.ocr_title):
         return True
-    if _fingerprint_gcd_issue_ids(session, image_path=image_path):
+    if _fingerprint_gcd_issue_ids(session, image_path=image_path, hints=hints):
+        return True
+    if len(_qualified_fingerprint_candidates(hints.fingerprint_candidates)) == 1:
         return True
     pool_ids = {int(c["gcd_issue_id"]) for c in publisher_filtered}
     if _gcd_issue_ids_from_prior_diagnosis(prior_diagnosis) & pool_ids:
         return True
     return False
+
+
+def _try_narrow_pool_by_single_fingerprint(
+    session: Session,
+    *,
+    hints: IntakeGcdRecoveryHints,
+    publisher_filtered: list[dict[str, Any]],
+) -> tuple[list[dict[str, Any]] | None, str | None, dict[str, Any]]:
+    """When exactly one qualified fingerprint exists, narrow to its GCD row or report pool conflict."""
+    fp_meta = _build_fingerprint_instrumentation(hints)
+    qualified = _qualified_fingerprint_candidates(hints.fingerprint_candidates)
+    if len(qualified) != 1:
+        if len(qualified) > 1:
+            fp_meta["fingerprint_conflict_reason"] = "multiple_fingerprint_candidates"
+        return None, None, fp_meta
+
+    target_gcd = _resolve_target_gcd_for_fingerprint(session, qualified[0])
+    if target_gcd is None:
+        return None, None, fp_meta
+
+    fp_meta["fingerprint_candidate_gcd_issue_id"] = int(target_gcd)
+    pool_match = [c for c in publisher_filtered if int(c["gcd_issue_id"]) == int(target_gcd)]
+    if not pool_match:
+        fp_meta.update(
+            {
+                "fingerprint_candidate_outside_pool": True,
+                "fingerprint_conflict_reason": FINGERPRINT_CONFLICT_WITH_POOL_REASON,
+            }
+        )
+        return [], FINGERPRINT_CONFLICT_WITH_POOL_REASON, fp_meta
+    if len(pool_match) == 1:
+        fp_meta.update(
+            {
+                "fingerprint_candidate_used": True,
+                "fingerprint_narrowed_candidate_count": 1,
+            }
+        )
+        return pool_match, None, fp_meta
+    return None, None, fp_meta
 
 
 def _prepare_scoring_candidates(
@@ -452,12 +612,24 @@ def _prepare_scoring_candidates(
     image_path: Path | None,
     prior_diagnosis: dict[str, Any],
     publisher_filtered: list[dict[str, Any]],
-) -> tuple[list[dict[str, Any]], str | None]:
+) -> tuple[list[dict[str, Any]], str | None, dict[str, Any]]:
     """Narrow who enters scoring; return block reason when pool is too broad."""
+    fp_meta = _build_fingerprint_instrumentation(hints)
     if not publisher_filtered:
-        return [], None
+        return [], None, fp_meta
+
+    narrowed_by_fp, fp_block, fp_meta = _try_narrow_pool_by_single_fingerprint(
+        session,
+        hints=hints,
+        publisher_filtered=publisher_filtered,
+    )
+    if fp_block:
+        return narrowed_by_fp or [], fp_block, fp_meta
+    if narrowed_by_fp is not None:
+        return narrowed_by_fp, None, fp_meta
+
     if len(publisher_filtered) == 1:
-        return publisher_filtered, None
+        return publisher_filtered, None, fp_meta
 
     if has_reliable_series_hint(hints.series):
         matched = [
@@ -465,7 +637,7 @@ def _prepare_scoring_candidates(
             for c in publisher_filtered
             if _series_match_evaluation(hints, c)[0] == "matched"
         ]
-        return matched, None
+        return matched, None, fp_meta
 
     if not _has_secondary_scoring_discriminator(
         session,
@@ -474,7 +646,7 @@ def _prepare_scoring_candidates(
         prior_diagnosis=prior_diagnosis,
         publisher_filtered=publisher_filtered,
     ):
-        return [], "insufficient_series_or_title_hint"
+        return [], "insufficient_series_or_title_hint", fp_meta
 
     narrowed = list(publisher_filtered)
     if hints.facsimile_or_reprint:
@@ -490,15 +662,22 @@ def _prepare_scoring_candidates(
         prior_rows = [c for c in narrowed if int(c["gcd_issue_id"]) in prior_ids]
         if prior_rows:
             narrowed = prior_rows
-    fp_ids = _fingerprint_gcd_issue_ids(session, image_path=image_path)
+    fp_ids = _fingerprint_gcd_issue_ids(session, image_path=image_path, hints=hints)
     if fp_ids:
         fp_rows = [c for c in narrowed if int(c["gcd_issue_id"]) in fp_ids]
         if fp_rows:
             narrowed = fp_rows
 
     if len(narrowed) > 1:
-        return [], "insufficient_series_or_title_hint"
-    return narrowed, None
+        return [], "insufficient_series_or_title_hint", fp_meta
+    if len(narrowed) == 1 and fp_ids:
+        fp_meta.update(
+            {
+                "fingerprint_candidate_used": True,
+                "fingerprint_narrowed_candidate_count": 1,
+            }
+        )
+    return narrowed, None, fp_meta
 
 
 def _series_matches(hints: IntakeGcdRecoveryHints, row: dict[str, Any]) -> bool:
@@ -529,12 +708,30 @@ def _title_overlap_score(hints: IntakeGcdRecoveryHints, row: dict[str, Any]) -> 
     return min(3.0, float(hits) * 1.5)
 
 
+def _fingerprint_pts_for_row(
+    session: Session,
+    hints: IntakeGcdRecoveryHints,
+    *,
+    gcd_issue_id: int,
+) -> float:
+    for candidate in _qualified_fingerprint_candidates(hints.fingerprint_candidates):
+        target = candidate.gcd_issue_id
+        if target is None:
+            target = _resolve_target_gcd_for_fingerprint(session, candidate)
+        if target is not None and int(target) == int(gcd_issue_id):
+            return float(_FINGERPRINT_BOOST)
+    return 0.0
+
+
 def _fingerprint_gcd_boost(
     session: Session,
     *,
     image_path: Path | None,
     gcd_issue_id: int,
+    hints: IntakeGcdRecoveryHints | None = None,
 ) -> float:
+    if hints is not None and hints.fingerprint_candidates:
+        return _fingerprint_pts_for_row(session, hints, gcd_issue_id=gcd_issue_id)
     if image_path is None or not image_path.is_file():
         return 0.0
     hits = search_catalog_fingerprint_hits_for_crop_path(session, crop_path=image_path, limit=5)
@@ -615,7 +812,12 @@ def _score_candidate_breakdown(
     elif reprint_row and hints.year and hints.year >= 2010:
         breakdown["facsimile_pts"] = -1
         score -= 1
-    fp_pts = _fingerprint_gcd_boost(session, image_path=image_path, gcd_issue_id=int(row["gcd_issue_id"]))
+    fp_pts = _fingerprint_gcd_boost(
+        session,
+        image_path=image_path,
+        gcd_issue_id=int(row["gcd_issue_id"]),
+        hints=hints,
+    )
     breakdown["fingerprint_pts"] = fp_pts
     score += int(fp_pts)
     breakdown["total"] = score
@@ -742,7 +944,49 @@ def _recovery_hints_payload(hints: IntakeGcdRecoveryHints) -> dict[str, Any]:
         "series_hint_reliable": has_reliable_series_hint(hints.series),
         "ocr_engine_available": hints.ocr_engine_available,
         "ocr_error": hints.ocr_error,
+        "fingerprint_candidate_count": len(_qualified_fingerprint_candidates(hints.fingerprint_candidates)),
+        "fingerprint_candidate_catalog_issue_id": hints.fingerprint_candidate_catalog_issue_id,
+        "fingerprint_candidate_gcd_issue_id": hints.fingerprint_candidate_gcd_issue_id,
+        "fingerprint_confidence": hints.fingerprint_confidence,
+        "fingerprint_match_source": hints.fingerprint_match_source,
     }
+
+
+def _fingerprint_only_auto_import_allowed(
+    *,
+    barcode: str,
+    hints: IntakeGcdRecoveryHints,
+    winner: dict[str, Any],
+) -> tuple[bool, str | None]:
+    winner_publisher = str(winner.get("publisher") or "")
+    if _publisher_matches(hints.publisher, winner_publisher):
+        publisher_ok = True
+    else:
+        prefix_pub = effective_publisher_for_barcode(barcode, None)
+        publisher_ok = bool(prefix_pub and _publisher_matches(prefix_pub, winner_publisher))
+    if not publisher_ok:
+        return False, "fingerprint_only_without_publisher_agreement"
+    validation = validate_barcode_catalog_match(
+        barcode,
+        publisher=winner_publisher,
+        issue_number=str(winner.get("issue_number") or ""),
+        year=str(hints.year) if hints.year is not None else None,
+    )
+    if validation.status != "exact_match":
+        return False, validation.reason or "barcode_catalog_conflict"
+    return True, None
+
+
+def _merge_pool_instrumentation(
+    instrumentation: dict[str, Any],
+    pool_fp_meta: dict[str, Any],
+    hints: IntakeGcdRecoveryHints,
+) -> None:
+    instrumentation.update(pool_fp_meta)
+    instrumentation.setdefault(
+        "fingerprint_candidate_count",
+        len(_qualified_fingerprint_candidates(hints.fingerprint_candidates)),
+    )
 
 
 def _ocr_unavailable_instrumentation(hints: IntakeGcdRecoveryHints) -> dict[str, Any]:
@@ -767,7 +1011,7 @@ def diagnose_gcd_non_barcode_recovery(
     """Build a P106-compatible diagnosis when barcode lookup missed but metadata finds one GCD issue."""
     base = dict(prior_diagnosis)
     base["normalized_barcode"] = normalize_scan_preserving_supplement(barcode) or barcode
-    base["fingerprint_candidate_count"] = len(_fingerprint_gcd_issue_ids(session, image_path=image_path))
+    base["fingerprint_candidate_count"] = len(_qualified_fingerprint_candidates(hints.fingerprint_candidates))
     if int(prior_diagnosis.get("gcd_match_count") or 0) > 0:
         base["p106_1_skipped"] = True
         base["p106_1_skip_reason"] = "prior_p106_gcd_match_count_nonzero"
@@ -804,14 +1048,14 @@ def diagnose_gcd_non_barcode_recovery(
         for c in candidates
         if _publisher_matches(hints.publisher, str(c.get("publisher") or ""))
     ]
-    scorable, pool_block = _prepare_scoring_candidates(
+    scorable, pool_block, pool_fp_meta = _prepare_scoring_candidates(
         session,
         hints=hints,
         image_path=image_path,
         prior_diagnosis=prior_diagnosis,
         publisher_filtered=publisher_filtered,
     )
-    if pool_block == "insufficient_series_or_title_hint":
+    if pool_block:
         instrumentation = {
             "decision_reason": pool_block,
             "ready_to_auto_import": False,
@@ -821,6 +1065,7 @@ def diagnose_gcd_non_barcode_recovery(
             "series_hint_reliable": has_reliable_series_hint(hints.series),
             **_ocr_unavailable_instrumentation(hints),
         }
+        _merge_pool_instrumentation(instrumentation, pool_fp_meta, hints)
         _log_p106_1_instrumentation(
             barcode=barcode,
             hints=hints,
@@ -863,6 +1108,8 @@ def diagnose_gcd_non_barcode_recovery(
         "fingerprint_candidate_count": base.get("fingerprint_candidate_count"),
         **_ocr_unavailable_instrumentation(hints),
     }
+    _merge_pool_instrumentation(instrumentation, pool_fp_meta, hints)
+    fingerprint_narrowed = bool(pool_fp_meta.get("fingerprint_candidate_used"))
 
     base.update(
         {
@@ -909,6 +1156,36 @@ def diagnose_gcd_non_barcode_recovery(
             }
         )
         return base
+
+    if fingerprint_narrowed:
+        allowed, fp_block = _fingerprint_only_auto_import_allowed(
+            barcode=barcode,
+            hints=hints,
+            winner=winner,
+        )
+        if not allowed:
+            block_reason = fp_block or "fingerprint_auto_import_blocked"
+            instrumentation["decision_reason"] = block_reason
+            instrumentation["ready_to_auto_import"] = False
+            instrumentation["fingerprint_conflict_reason"] = block_reason
+            _log_p106_1_instrumentation(
+                barcode=barcode,
+                hints=hints,
+                prior_diagnosis=prior_diagnosis,
+                instrumentation=instrumentation,
+            )
+            base.update(
+                {
+                    "ready_to_auto_import": False,
+                    "status": P106_STATUS_REVIEW_REQUIRED,
+                    "reason": block_reason,
+                    "final_reason": block_reason,
+                    "recovery_block_reason": block_reason,
+                    "gcd_match_count": 0,
+                    "gcd_non_barcode_ranked": ranked[:5],
+                }
+            )
+            return base
 
     gcd_issue_id = int(winner["gcd_issue_id"])
     gcd_match = {

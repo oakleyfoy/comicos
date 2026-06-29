@@ -737,7 +737,7 @@ def _bound_barcode_gap_instrumentation(inst: Any) -> dict[str, Any] | None:
     if not isinstance(inst, dict):
         return None
     bounded = {key: value for key, value in inst.items() if key not in {"image_bytes", "full_image"}}
-    for list_key in ("gcd_candidates", "fingerprint_top_hits", "candidates_scored"):
+    for list_key in ("gcd_candidates", "fingerprint_top_hits", "fingerprint_candidates", "candidates_scored"):
         raw_list = bounded.get(list_key)
         if isinstance(raw_list, list):
             bounded[list_key] = raw_list[:_P1061_BARCODE_GAP_CANDIDATE_MAX]

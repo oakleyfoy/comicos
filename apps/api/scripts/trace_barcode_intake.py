@@ -203,7 +203,7 @@ def main() -> None:
                 c for c in candidates if _publisher_matches(hints.publisher, str(c.get("publisher") or ""))
             ]
 
-        scorable, pool_block = _prepare_scoring_candidates(
+        scorable, pool_block, _pool_fp_meta = _prepare_scoring_candidates(
             session,
             hints=hints,
             image_path=image_path,
