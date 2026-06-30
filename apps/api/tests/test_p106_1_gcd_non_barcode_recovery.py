@@ -294,6 +294,113 @@ def test_facsimile_ocr_boosts_facsimile_gcd_row(
     assert diag.get("proposed_action") == "auto_import"
 
 
+@patch("app.services.p106_1_gcd_non_barcode_recovery_service.extract_ocr_signal")
+def test_facsimile_cover_issue_overrides_barcode_supplement(
+    mock_ocr: MagicMock,
+    session: Session,
+    tmp_path: Path,
+) -> None:
+    # Cover plainly reads ASM #122 but the barcode supplement encodes #1.
+    # No explicit reprint keyword: the disagreement + reliable series is enough.
+    bc = "75960620629200111"
+    mock_ocr.return_value = MagicMock(
+        confidence=0.9,
+        title="Amazing Spider-Man",
+        issue_number="122",
+        publisher="Marvel",
+        raw_text="Amazing Spider-Man 122",
+    )
+    item = _FakeIntakeItem(matched_issue_number="1", matched_publisher="Marvel")
+    hints = gather_intake_gcd_recovery_hints(
+        session,
+        item=item,
+        normalized_barcode=bc,
+        image_path=None,
+        image_bytes=b"fake",
+        p105=None,
+    )
+    assert hints.issue_number == "122"
+    assert hints.displayed_issue_number == "122"
+    assert hints.barcode_supplement_issue_number not in (None, "122")
+    assert hints.barcode_issue_authoritative is False
+    assert hints.facsimile_or_reprint is True
+
+
+@patch("app.services.p106_1_gcd_non_barcode_recovery_service.extract_ocr_signal")
+def test_facsimile_surfaces_asm_122_review_candidates(
+    mock_ocr: MagicMock,
+    session: Session,
+    tmp_path: Path,
+) -> None:
+    bc = "75960620629200111"
+    gcd_path = _gcd_db(
+        tmp_path,
+        rows=[
+            {
+                "gcd_issue_id": 88300,
+                "series": "Amazing Spider-Man",
+                "number": "122",
+                "barcode": None,
+                "title": "Facsimile Edition",
+                "notes": "facsimile reprint",
+                "key_date": "2023-01-00",
+                "series_id": 1,
+            },
+            {
+                "gcd_issue_id": 88301,
+                "series": "Amazing Spider-Man",
+                "number": "122",
+                # Facsimile edition carries its own modern barcode, so the
+                # empty-barcode query would miss it without the title+issue query.
+                "barcode": "9781302955555",
+                "title": "Facsimile Edition Variant",
+                "notes": "facsimile",
+                "key_date": "2023-02-00",
+                "series_id": 2,
+            },
+        ],
+    )
+    mock_ocr.return_value = MagicMock(
+        confidence=0.9,
+        title="Amazing Spider-Man",
+        issue_number="122",
+        publisher="Marvel",
+        raw_text="Amazing Spider-Man 122 Facsimile Edition",
+    )
+    item = _FakeIntakeItem(matched_issue_number="1", matched_publisher="Marvel", matched_year="2023")
+    # Simulate the full-cover reprocess: the cover photo yields a safe full-cover region.
+    hints = gather_intake_gcd_recovery_hints(
+        session,
+        item=item,
+        normalized_barcode=bc,
+        image_path=None,
+        image_bytes=b"fake",
+        p105=None,
+        fingerprint_region_safe=True,
+        fingerprint_image_region="full_cover",
+    )
+    assert hints.issue_number == "122"
+
+    diag = diagnose_gcd_non_barcode_recovery(
+        session,
+        barcode=bc,
+        gcd_path=gcd_path,
+        cache_path=None,
+        hints=hints,
+        image_path=None,
+        prior_diagnosis={"gcd_match_count": 0, "normalized_barcode": bc},
+    )
+    assert diag["ready_to_auto_import"] is False
+    assert diag["status"] == P106_STATUS_REVIEW_REQUIRED
+    assert diag.get("facsimile_reprint_detected") is True
+    tops = diag.get("needs_review_top_candidates")
+    assert isinstance(tops, list) and tops
+    assert all(str(row.get("issue_number")) == "122" for row in tops)
+    assert any(row.get("is_facsimile_reprint") for row in tops)
+    # Both ASM #122 editions (original empty-barcode + barcoded facsimile) were found.
+    assert {88300, 88301} <= {row["gcd_issue_id"] for row in diag["gcd_non_barcode_ranked"]}
+
+
 def test_has_reliable_series_hint_rejects_blank_and_generic() -> None:
     assert has_reliable_series_hint(None) is False
     assert has_reliable_series_hint("") is False

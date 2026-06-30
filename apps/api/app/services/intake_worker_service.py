@@ -352,6 +352,11 @@ def _scanner_gap_finish_reason(diagnosis: dict[str, Any]) -> str:
         return FULL_COVER_USER_MESSAGE
     tops = diagnosis.get("needs_review_top_candidates")
     if isinstance(tops, list) and tops:
+        if diagnosis.get("facsimile_reprint_detected"):
+            return (
+                "Barcode isn't authoritative — cover reads like a facsimile/reprint. "
+                "Showing the closest catalog editions; pick one or use Import & Accept."
+            )
         if diagnosis.get("review_decision") == "needs_review_top_candidates":
             return "Cover fingerprint suggests catalog match(es) — review top candidates or use Import & Accept."
     cv = diagnosis.get("comicvine_review_candidate")

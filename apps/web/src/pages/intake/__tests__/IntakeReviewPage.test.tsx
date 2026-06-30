@@ -292,6 +292,46 @@ describe("IntakeReviewPage", () => {
     await waitFor(() => expect(uploadSpy).toHaveBeenCalledWith(42, file));
   });
 
+  it("surfaces facsimile/reprint candidates first with a non-authoritative-barcode note", async () => {
+    vi.spyOn(intake, "getIntakeReview").mockResolvedValue({
+      ...baseReview,
+      counts: { ...baseReview.counts, needs_review: 1 },
+      items: [
+        {
+          ...baseReview.items[0],
+          id: 55,
+          status: "needs_review",
+          selected_catalog_issue_id: null,
+          matched_series: null,
+          matched_issue_number: null,
+          barcode_read: {
+            barcode_gap: {
+              facsimile_reprint_detected: true,
+              needs_review_top_candidates: [
+                {
+                  series: "Amazing Spider-Man",
+                  issue_number: "122",
+                  publisher: "Marvel",
+                  confidence: 0,
+                  source: "gcd_facsimile",
+                  is_facsimile_reprint: true,
+                },
+              ],
+            },
+          },
+          candidates: [],
+        },
+      ],
+    });
+    renderReview();
+    expect(await screen.findByTestId("facsimile-note-55")).toHaveTextContent(
+      /isn.t authoritative/i,
+    );
+    const list = screen.getByTestId("fp-candidates-55");
+    expect(list).toHaveTextContent("Amazing Spider-Man #122");
+    expect(list).toHaveTextContent("Facsimile / reprint");
+  });
+
   it("hands off to the phone via QR on a desktop (no camera)", async () => {
     stubCoarsePointer(false); // desktop: cannot reach a camera, must hand off
     vi.spyOn(intake, "getIntakeReview").mockResolvedValue(fullCoverReview);

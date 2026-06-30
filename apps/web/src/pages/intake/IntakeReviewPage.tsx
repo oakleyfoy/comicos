@@ -82,7 +82,20 @@ type IntakeReviewCandidateRow = {
   source?: string;
   cover_url?: string | null;
   import_ready?: boolean;
+  is_facsimile_reprint?: boolean;
 };
+
+function intakeFacsimileReprintDetected(item: IntakeItem): boolean {
+  const gap = intakeBarcodeGap(item);
+  return gap?.facsimile_reprint_detected === true;
+}
+
+function candidateSourceLabel(row: IntakeReviewCandidateRow): string {
+  if (row.is_facsimile_reprint || row.source === "gcd_facsimile") return "Facsimile / reprint";
+  if (row.source === "gcd_non_barcode") return "Catalog (GCD)";
+  if (row.source === "comicvine") return "ComicVine";
+  return "Fingerprint";
+}
 
 function intakeNeedsFullCoverPhoto(item: IntakeItem): boolean {
   if (item.status === "needs_full_cover_photo") return true;
@@ -613,6 +626,15 @@ export function IntakeReviewPage(): JSX.Element {
                       : "GCD barcode match — use Import & Accept to add to your catalog."}
                   </p>
                 ) : null}
+                {intakeFacsimileReprintDetected(item) ? (
+                  <p
+                    className="mt-2 text-sm text-amber-200/90"
+                    data-testid={`facsimile-note-${item.id}`}
+                  >
+                    Barcode isn&apos;t authoritative — the cover reads like a facsimile/reprint.
+                    Showing the closest catalog editions first.
+                  </p>
+                ) : null}
                 {fpCandidates.length > 0 ? (
                   <ul className="mt-2 space-y-1.5" data-testid={`fp-candidates-${item.id}`}>
                     {fpCandidates.map((row, idx) => (
@@ -625,12 +647,12 @@ export function IntakeReviewPage(): JSX.Element {
                           {row.issue_number ? ` #${String(row.issue_number).replace(/^#/, "")}` : ""}
                         </span>
                         {row.publisher ? <span className="text-slate-400"> · {row.publisher}</span> : null}
-                        {row.confidence != null ? (
-                          <span className="text-slate-500">
-                            {" "}
-                            · {(Number(row.confidence) * 100).toFixed(0)}% · Fingerprint
-                          </span>
-                        ) : null}
+                        <span className="text-slate-500">
+                          {row.confidence != null && Number(row.confidence) > 0
+                            ? ` · ${(Number(row.confidence) * 100).toFixed(0)}%`
+                            : ""}
+                          {` · ${candidateSourceLabel(row)}`}
+                        </span>
                       </li>
                     ))}
                   </ul>

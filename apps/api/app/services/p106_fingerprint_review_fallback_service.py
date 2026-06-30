@@ -281,6 +281,38 @@ def attach_fingerprint_review_to_diagnosis(
     top = filtered
     if not top:
         return bundle
+    existing = diagnosis.get("needs_review_top_candidates")
+    if diagnosis.get("facsimile_reprint_detected") and isinstance(existing, list) and existing:
+        # Facsimile/reprint identity (cover OCR + GCD edition match) takes priority over
+        # weaker fingerprint guesses. Keep facsimile rows first, append any new
+        # fingerprint rows below for completeness.
+        seen = {
+            _normalize_identity_triple(
+                publisher=str(r.get("publisher") or ""),
+                series=str(r.get("series") or r.get("title") or ""),
+                issue_number=str(r.get("issue_number") or ""),
+            )
+            for r in existing
+            if isinstance(r, dict)
+        }
+        merged = list(existing)
+        for row in top:
+            key = _normalize_identity_triple(
+                publisher=str(row.get("publisher") or ""),
+                series=str(row.get("series") or row.get("title") or ""),
+                issue_number=str(row.get("issue_number") or ""),
+            )
+            if key in seen:
+                continue
+            seen.add(key)
+            merged.append(row)
+        diagnosis["needs_review_top_candidates"] = merged[:3]
+        diagnosis["fingerprint_review"] = {
+            "collapsed_family_count": bundle["collapsed_family_count"],
+            "single_family": bundle["single_family"],
+            "qualified_fingerprint_count": bundle["qualified_fingerprint_count"],
+        }
+        return bundle
     diagnosis["needs_review_top_candidates"] = top
     diagnosis["fingerprint_review"] = {
         "collapsed_family_count": bundle["collapsed_family_count"],

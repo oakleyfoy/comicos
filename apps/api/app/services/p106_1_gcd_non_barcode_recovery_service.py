@@ -118,6 +118,12 @@ class IntakeGcdRecoveryHints:
     ocr_issue_number: str | None
     ocr_publisher: str | None
     facsimile_or_reprint: bool = False
+    # Issue number printed on the cover (OCR) vs. encoded in the barcode supplement.
+    # For facsimile/reprint editions these disagree (e.g. cover #122, supplement #1),
+    # and the cover-displayed number is the identity the collector cares about.
+    displayed_issue_number: str | None = None
+    barcode_supplement_issue_number: str | None = None
+    barcode_issue_authoritative: bool = True
     series_norm_aliases: list[str] = field(default_factory=list)
     ocr_confidence: float = 0.0
     raw_ocr_text_excerpt: str | None = None
@@ -327,7 +333,29 @@ def gather_intake_gcd_recovery_hints(
     if not publisher and ocr_publisher:
         publisher = ocr_publisher
 
-    if (
+    if not series and ocr_title:
+        if has_reliable_series_hint(ocr_title) or ocr_confidence >= 0.35:
+            series = ocr_title
+
+    # Facsimile / reprint detection. The barcode supplement is NOT authoritative for
+    # reprints: a 2023 facsimile of Amazing Spider-Man #122 encodes supplement #1 but
+    # the cover plainly reads #122. Treat as facsimile when an explicit reprint cue is
+    # present, OR when the cover-displayed issue (OCR) clearly disagrees with the
+    # barcode supplement and we have a reliable series hint to corroborate the cover.
+    displayed_issue = ocr_issue or None
+    series_hint_reliable = has_reliable_series_hint(series)
+    cover_issue_disagrees = bool(
+        displayed_issue
+        and encoded_issue
+        and normalize_issue_number(displayed_issue) != normalize_issue_number(encoded_issue)
+    )
+    facsimile = bool(facsimile) or (cover_issue_disagrees and series_hint_reliable)
+    barcode_issue_authoritative = not facsimile
+
+    if facsimile and displayed_issue and series_hint_reliable:
+        # Cover wins: search by the issue the collector sees, not the barcode supplement.
+        issue_number = displayed_issue
+    elif (
         ocr_issue
         and issue_number
         and encoded_issue
@@ -337,10 +365,6 @@ def gather_intake_gcd_recovery_hints(
         issue_number = ocr_issue
     elif not issue_number and encoded_issue:
         issue_number = encoded_issue
-
-    if not series and ocr_title:
-        if has_reliable_series_hint(ocr_title) or ocr_confidence >= 0.35:
-            series = ocr_title
 
     validation = validate_barcode_catalog_match(
         normalized_barcode,
@@ -402,6 +426,9 @@ def gather_intake_gcd_recovery_hints(
         ocr_issue_number=ocr_issue,
         ocr_publisher=ocr_publisher,
         facsimile_or_reprint=facsimile,
+        displayed_issue_number=displayed_issue,
+        barcode_supplement_issue_number=encoded_issue,
+        barcode_issue_authoritative=barcode_issue_authoritative,
         series_norm_aliases=aliases,
         ocr_confidence=ocr_confidence,
         raw_ocr_text_excerpt=raw_ocr_excerpt,
@@ -536,6 +563,169 @@ def _query_gcd_empty_barcode_candidates(gcd_path: Path, *, issue_number: str | N
                 "pub_year": row["pub_year"],
             }
         )
+    return out
+
+
+def _query_gcd_candidates_by_title_issue(
+    gcd_path: Path,
+    *,
+    issue_number: str | None,
+    series_hint: str | None,
+) -> list[dict[str, Any]]:
+    """Find GCD issues by cover-displayed issue number regardless of barcode column.
+
+    Used only for facsimile/reprint recovery: a facsimile edition can carry its own
+    modern barcode (so the empty-barcode query misses it) while the original printing
+    has no barcode. Returning both lets the original and the reprint surface together,
+    ordered facsimile-first downstream.
+    """
+    if not gcd_path.is_file():
+        return []
+    issue_norm = normalize_issue_number(str(issue_number or ""))
+    variants = _issue_number_sql_variants(issue_number)
+    if not issue_norm or not variants:
+        return []
+    placeholders = ", ".join("?" * len(variants))
+    sql = f"""
+            SELECT i.id AS gcd_issue_id,
+                   p.name AS publisher,
+                   s.name AS series,
+                   i.number AS issue_number,
+                   i.barcode AS barcode_raw,
+                   i.key_date AS key_date,
+                   s.year_began AS year_began,
+                   i.title AS title,
+                   i.notes AS notes,
+                   {YEAR_EXPR} AS pub_year
+            FROM gcd_issue i
+            JOIN gcd_series s ON s.id = i.series_id
+            LEFT JOIN gcd_publisher p ON p.id = s.publisher_id
+            WHERE trim(i.number) IN ({placeholders})
+            """
+    conn = sqlite3.connect(gcd_path)
+    conn.row_factory = sqlite3.Row
+    try:
+        rows = conn.execute(sql, tuple(variants)).fetchall()
+    except Exception:
+        return []
+    finally:
+        conn.close()
+
+    series_norm = normalize_series_name(series_hint) if series_hint else ""
+    series_reliable = has_reliable_series_hint(series_hint)
+    out: list[dict[str, Any]] = []
+    for row in rows:
+        if normalize_issue_number(str(row["issue_number"] or "")) != issue_norm:
+            continue
+        # When we have a reliable cover-series hint, keep only compatible series so we
+        # don't drown the review list with every publisher's issue #122.
+        if series_reliable:
+            cand_series = normalize_series_name(str(row["series"] or ""))
+            if cand_series != series_norm and not series_names_compatible(cand_series, series_norm):
+                continue
+        out.append(
+            {
+                "gcd_issue_id": int(row["gcd_issue_id"]),
+                "publisher": row["publisher"],
+                "series": row["series"],
+                "issue_number": row["issue_number"],
+                "barcode_raw": row["barcode_raw"],
+                "key_date": row["key_date"],
+                "year_began": row["year_began"],
+                "title": row["title"],
+                "notes": row["notes"],
+                "pub_year": row["pub_year"],
+            }
+        )
+    return out
+
+
+def _merge_gcd_candidate_pools(
+    primary: list[dict[str, Any]],
+    extra: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    seen = {int(c["gcd_issue_id"]) for c in primary if c.get("gcd_issue_id") is not None}
+    merged = list(primary)
+    for cand in extra:
+        gid = cand.get("gcd_issue_id")
+        if gid is None or int(gid) in seen:
+            continue
+        seen.add(int(gid))
+        merged.append(cand)
+    return merged
+
+
+def _gcd_rows_to_review_candidates(
+    session: Session,
+    *,
+    cache_path: Path | None,
+    ranked_rows: list[dict[str, Any]],
+    hints: IntakeGcdRecoveryHints,
+    limit: int = 3,
+) -> list[dict[str, Any]]:
+    """Turn ranked GCD recovery rows into pickable review candidates, facsimile-first.
+
+    Reprint/facsimile editions are surfaced ahead of original printings so the
+    collector sees the edition that physically matches their book first.
+    """
+    from app.services.p106_fingerprint_review_fallback_service import (
+        FINGERPRINT_REVIEW_SOURCE,
+        review_candidate_from_catalog_issue,
+    )
+
+    ordered = sorted(
+        ranked_rows,
+        key=lambda r: (0 if _row_is_reprint_or_facsimile(r) else 1),
+    )
+    out: list[dict[str, Any]] = []
+    for row in ordered[:limit]:
+        gcd_issue_id = row.get("gcd_issue_id")
+        reprint_row = _row_is_reprint_or_facsimile(row)
+        source = "gcd_facsimile" if reprint_row else "gcd_non_barcode"
+        catalog_id: int | None = None
+        if gcd_issue_id is not None:
+            catalog_id = resolve_catalog_issue_for_gcd_barcode(
+                session,
+                cache_path=cache_path,
+                gcd_match={
+                    "gcd_issue_id": int(gcd_issue_id),
+                    "publisher": row.get("publisher"),
+                    "series": row.get("series"),
+                    "issue_number": row.get("issue_number"),
+                    "key_date": row.get("key_date"),
+                    "year_began": row.get("year_began"),
+                    "title": row.get("title"),
+                    "barcode_raw": row.get("barcode_raw"),
+                    "match_source_field": "non_barcode_recovery",
+                },
+                gcd_issue_id=int(gcd_issue_id),
+            )
+        candidate_row: dict[str, Any] | None = None
+        if catalog_id is not None:
+            candidate_row = review_candidate_from_catalog_issue(
+                session,
+                catalog_issue_id=int(catalog_id),
+                confidence=0.0,
+                source=source,
+            )
+        if candidate_row is None:
+            year = _parse_year_hint(row.get("key_date")) or _parse_year_hint(row.get("pub_year"))
+            candidate_row = {
+                "catalog_issue_id": catalog_id,
+                "series": row.get("series"),
+                "title": row.get("title") or row.get("series"),
+                "issue_number": row.get("issue_number"),
+                "publisher": row.get("publisher"),
+                "year": str(year) if year is not None else None,
+                "cover_url": None,
+                "source": source,
+                "gcd_issue_id": int(gcd_issue_id) if gcd_issue_id is not None else None,
+            }
+        candidate_row["confidence"] = 0.0
+        candidate_row["source"] = source
+        candidate_row["is_facsimile_reprint"] = reprint_row
+        candidate_row["import_ready"] = False
+        out.append(candidate_row)
     return out
 
 
@@ -1013,6 +1203,9 @@ def _recovery_hints_payload(hints: IntakeGcdRecoveryHints) -> dict[str, Any]:
         "ocr_confidence": hints.ocr_confidence,
         "raw_ocr_text_excerpt": hints.raw_ocr_text_excerpt,
         "facsimile_or_reprint": hints.facsimile_or_reprint,
+        "displayed_issue_number": hints.displayed_issue_number,
+        "barcode_supplement_issue_number": hints.barcode_supplement_issue_number,
+        "barcode_issue_authoritative": hints.barcode_issue_authoritative,
         "series_hint_reliable": has_reliable_series_hint(hints.series),
         "ocr_engine_available": hints.ocr_engine_available,
         "ocr_error": hints.ocr_error,
@@ -1146,6 +1339,15 @@ def diagnose_gcd_non_barcode_recovery(
         return _finalize_p106_1_diagnosis_with_fingerprint_review(session, base, hints=hints, barcode=barcode)
 
     candidates = _query_gcd_empty_barcode_candidates(gcd_path, issue_number=hints.issue_number)
+    if hints.facsimile_or_reprint:
+        candidates = _merge_gcd_candidate_pools(
+            candidates,
+            _query_gcd_candidates_by_title_issue(
+                gcd_path,
+                issue_number=hints.issue_number,
+                series_hint=hints.series,
+            ),
+        )
     publisher_filtered = [
         c
         for c in candidates
@@ -1258,6 +1460,28 @@ def diagnose_gcd_non_barcode_recovery(
                 "gcd_match_count": 0,
             }
         )
+        if hints.facsimile_or_reprint and ranked:
+            facsimile_candidates = _gcd_rows_to_review_candidates(
+                session,
+                cache_path=cache_path,
+                ranked_rows=ranked,
+                hints=hints,
+                limit=3,
+            )
+            if facsimile_candidates:
+                base["facsimile_reprint_detected"] = True
+                base["needs_review_top_candidates"] = facsimile_candidates
+                base["review_decision"] = "facsimile_candidates"
+                base["status"] = P106_STATUS_REVIEW_REQUIRED
+                primary = facsimile_candidates[0]
+                base.setdefault("gcd_series", primary.get("series") or primary.get("title"))
+                base.setdefault("gcd_issue_number", primary.get("issue_number"))
+                base.setdefault("gcd_publisher", primary.get("publisher"))
+                instrumentation["facsimile_reprint_detected"] = True
+                instrumentation["facsimile_candidate_count"] = len(facsimile_candidates)
+                instrumentation["ui_finish_reason"] = (
+                    "Likely facsimile/reprint — showing closest catalog editions"
+                )
         return _finalize_p106_1_diagnosis_with_fingerprint_review(session, base, hints=hints, barcode=barcode)
 
     if fingerprint_narrowed:

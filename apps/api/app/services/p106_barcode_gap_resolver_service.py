@@ -817,6 +817,8 @@ def barcode_gap_payload_from_diagnosis(diagnosis: dict[str, Any]) -> dict[str, A
         payload["import_path"] = diagnosis.get("import_path")
     if diagnosis.get("full_cover_reprocess_completed"):
         payload["full_cover_reprocess_completed"] = True
+    if diagnosis.get("facsimile_reprint_detected"):
+        payload["facsimile_reprint_detected"] = True
     return payload
 
 
