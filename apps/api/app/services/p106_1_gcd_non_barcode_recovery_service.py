@@ -401,24 +401,18 @@ def gather_intake_gcd_recovery_hints(
     # the vision model. This is what makes the facsimile path work in production.
     from app.services.intake_fingerprint_image_region_service import REGION_FULL_COVER
 
+    # On the full-cover review path the user explicitly uploaded a cover to identify
+    # it, so always run the GPT vision read here. Local Tesseract is unreliable on
+    # covers — it reads the barcode strip ("9606\"20629") or short garbage ("WAN")
+    # that still *looks* like a series, so we cannot gate on OCR "quality". The vision
+    # read is the same capability that instantly recognizes the book in chat. Gated to
+    # full-cover, region-safe images behind the sandbox flag + key, so it never runs on
+    # barcode-strip scans. The result only overrides when it returns a real series.
     vision_cover_read_used = False
-    tess_series_candidate = series or ocr_title
-    # A usable cover series must contain real words, not just barcode digits.
-    # has_reliable_series_hint() treats all-digit tokens as reliable, so it can't be
-    # used here (Tesseract's barcode-strip garbage like '9606"20629' would pass it).
-    tess_has_word_series = bool(re.search(r"[A-Za-z]{3,}", tess_series_candidate or ""))
     full_cover_region = (
         fingerprint_image_region == REGION_FULL_COVER and fingerprint_region_safe is not False
     )
-    local_ocr_weak = (
-        not tess_has_word_series or not ocr_engine_available or ocr_confidence < 0.5
-    )
-    if (
-        image_bytes
-        and full_cover_region
-        and not full_cover_followup_required
-        and local_ocr_weak
-    ):
+    if image_bytes and full_cover_region and not full_cover_followup_required:
         vision = _vision_cover_read_for_recovery(
             image_bytes, intake_item_id=int(getattr(item, "id", 0) or 0)
         )

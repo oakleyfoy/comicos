@@ -326,12 +326,20 @@ def test_facsimile_cover_issue_overrides_barcode_supplement(
     assert hints.facsimile_or_reprint is True
 
 
+@patch("app.services.p106_1_gcd_non_barcode_recovery_service.get_settings")
 @patch("app.services.p106_1_gcd_non_barcode_recovery_service.extract_ocr_signal")
 def test_facsimile_surfaces_asm_122_review_candidates(
     mock_ocr: MagicMock,
+    mock_settings: MagicMock,
     session: Session,
     tmp_path: Path,
 ) -> None:
+    from types import SimpleNamespace
+
+    # Exercise the Tesseract + GCD path deterministically (vision read disabled).
+    mock_settings.return_value = SimpleNamespace(
+        photo_import_vision_sandbox=False, openai_api_key=None
+    )
     bc = "75960620629200111"
     gcd_path = _gcd_db(
         tmp_path,
