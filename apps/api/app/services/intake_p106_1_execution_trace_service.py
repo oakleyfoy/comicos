@@ -24,6 +24,7 @@ class IntakeP1061Trace:
     full_cover_followup_required: bool = False
     fingerprint_region_safe: bool = False
     fingerprint_image_region: str = "unknown"
+    barcode: str | None = None
 
     def record(self, tag: str, payload: dict[str, Any]) -> None:
         row = {"tag": tag, **payload}
@@ -128,6 +129,24 @@ def gated_search_catalog_fingerprint_hits_for_crop_path(session, *, crop_path, l
         return []
     if trace is not None:
         trace.fingerprint_search_called = True
+    from app.services.intake_fingerprint_search_debug_service import (
+        FingerprintSearchDebugContext,
+        fingerprint_search_debug_context,
+        get_fingerprint_search_debug_context,
+    )
+
+    existing = get_fingerprint_search_debug_context()
+    if existing is not None:
+        return search_catalog_fingerprint_hits_for_crop_path(session, crop_path=crop_path, limit=limit)
+    if trace is not None:
+        ctx = FingerprintSearchDebugContext(
+            intake_item_id=trace.intake_item_id,
+            barcode=trace.barcode,
+            fingerprint_image_region=trace.fingerprint_image_region,
+            fingerprint_region_safe=trace.fingerprint_region_safe,
+        )
+        with fingerprint_search_debug_context(ctx):
+            return search_catalog_fingerprint_hits_for_crop_path(session, crop_path=crop_path, limit=limit)
     return search_catalog_fingerprint_hits_for_crop_path(session, crop_path=crop_path, limit=limit)
 
 

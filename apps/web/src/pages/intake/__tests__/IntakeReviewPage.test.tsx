@@ -160,7 +160,7 @@ describe("IntakeReviewPage", () => {
     await waitFor(() => expect(chooseSpy).toHaveBeenCalledWith(11, 900));
   });
 
-  it("shows full-cover prompt and upload button", async () => {
+  it("shows full-cover prompt and camera/upload actions", async () => {
     vi.spyOn(intake, "getIntakeReview").mockResolvedValue({
       ...baseReview,
       counts: { ...baseReview.counts, needs_full_cover_photo: 1 },
@@ -176,9 +176,40 @@ describe("IntakeReviewPage", () => {
     });
     renderReview();
     expect(await screen.findByTestId("full-cover-prompt-42")).toBeInTheDocument();
-    expect(screen.getByTestId("full-cover-upload-42")).toHaveTextContent("Add full-cover photo");
+    expect(screen.getByTestId("full-cover-camera-42")).toHaveTextContent("Take Full Cover Photo");
+    expect(screen.getByTestId("full-cover-upload-42")).toHaveTextContent("Upload Existing Photo");
     expect(screen.getByTestId("full-cover-prompt-42")).toHaveTextContent(
-      "Add a full front-cover photo to identify by cover art.",
+      "Take a full front-cover photo to identify by cover art.",
     );
+    const cameraInput = screen.getByTestId("full-cover-camera-input");
+    expect(cameraInput).toHaveAttribute("accept", "image/*");
+    expect(cameraInput).toHaveAttribute("capture", "environment");
+    expect(screen.getByTestId("full-cover-upload-input")).toHaveAttribute("accept", "image/*");
+  });
+
+  it("uploads captured full-cover photo via API", async () => {
+    const uploadSpy = vi.spyOn(intake, "uploadIntakeFullCoverPhoto").mockResolvedValue({
+      ...baseReview.items[0],
+      id: 42,
+      status: "processing",
+    });
+    vi.spyOn(intake, "getIntakeReview").mockResolvedValue({
+      ...baseReview,
+      items: [
+        {
+          ...baseReview.items[0],
+          id: 42,
+          status: "needs_full_cover_photo",
+          barcode_read: { needs_full_cover_photo: true },
+          candidates: [],
+        },
+      ],
+    });
+    renderReview();
+    fireEvent.click(await screen.findByTestId("full-cover-camera-42"));
+    const input = screen.getByTestId("full-cover-camera-input") as HTMLInputElement;
+    const file = new File(["jpeg"], "cover.jpg", { type: "image/jpeg" });
+    fireEvent.change(input, { target: { files: [file] } });
+    await waitFor(() => expect(uploadSpy).toHaveBeenCalledWith(42, file));
   });
 });

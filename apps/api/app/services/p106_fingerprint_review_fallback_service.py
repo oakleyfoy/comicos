@@ -15,6 +15,7 @@ from app.services.barcode_validation_service import (
 )
 from app.services.catalog_ingestion_service import normalize_issue_number, normalize_series_name
 from app.services.p103_gcd_enrichment_helpers import extract_gcd_issue_id, effective_catalog_issue_year
+from app.services.intake_fingerprint_search_debug_service import filter_cross_publisher_fingerprint_review_rows
 from app.services.p106_1_gcd_non_barcode_recovery_service import (
     FINGERPRINT_CATALOG_MATCH_SOURCE,
     FingerprintRecoveryCandidate,
@@ -241,6 +242,18 @@ def attach_fingerprint_review_to_diagnosis(
         return {"top_candidates": [], "collapsed_family_count": 0, "single_family": False, "qualified_fingerprint_count": 0}
     bundle = build_fingerprint_review_bundle(session, hints, limit=3)
     top = bundle["top_candidates"]
+    filtered, conflict = filter_cross_publisher_fingerprint_review_rows(
+        barcode=barcode,
+        rows=top,
+        hints_publisher=hints.publisher,
+    )
+    if conflict:
+        diagnosis["fingerprint_conflict_reason"] = conflict
+        diagnosis.pop("needs_review_top_candidates", None)
+        diagnosis.pop("review_decision", None)
+        bundle["top_candidates"] = []
+        return bundle
+    top = filtered
     if not top:
         return bundle
     diagnosis["needs_review_top_candidates"] = top

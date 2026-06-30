@@ -79,23 +79,6 @@ def search_catalog_fingerprint_hits_for_crop_path(
     limit: int = 10,
 ) -> list[FingerprintCatalogHit]:
     """Global catalog fingerprint search for a photo crop (E1)."""
-    hashes = fingerprint_hashes_for_crop(crop_path)
-    if hashes is None:
-        return []
-    phash, dhash, ahash = hashes
-    similar = search_similar_catalog_fingerprints(
-        session, phash=phash, dhash=dhash, ahash=ahash, limit=limit
-    )
-    hits: list[FingerprintCatalogHit] = []
-    for _row, confidence, distance in similar:
-        if _row.issue_id is None:
-            continue
-        hits.append(
-            FingerprintCatalogHit(
-                issue_id=int(_row.issue_id),
-                score=round(confidence * 100.0, 2),
-                confidence=float(confidence),
-                min_hamming_distance=int(distance),
-            )
-        )
-    return hits
+    from app.services.intake_fingerprint_search_debug_service import execute_catalog_fingerprint_search
+
+    return execute_catalog_fingerprint_search(session, crop_path=crop_path, limit=limit)

@@ -765,6 +765,7 @@ def process_intake_item(session: Session, *, item_id: int) -> str:
         _stamp_item_barcode_identity(item, normalized)
         trace.scanned_barcode_raw = item.raw_barcode
         trace.normalized_barcode = normalized
+        _p106_1_exec_trace.barcode = normalized
         trace.p105_snapshot = p105_field_test_snapshot(p105)
 
         recovered_full = _recover_seventeen_digit_barcode(
@@ -779,6 +780,7 @@ def process_intake_item(session: Session, *, item_id: int) -> str:
                 normalized = scan_validation.normalized or recovered_full[:64]
                 _apply_recovered_barcode_to_item(item, normalized=normalized)
                 trace.normalized_barcode = normalized
+                _p106_1_exec_trace.barcode = normalized
                 logger.info(
                     "intake.item.barcode_recovered item_id=%s normalized=%s",
                     item_id,

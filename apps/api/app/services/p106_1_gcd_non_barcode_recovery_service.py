@@ -377,6 +377,20 @@ def gather_intake_gcd_recovery_hints(
             fingerprint_image_region=region_kind,
             full_cover_followup_required=full_cover_followup_required,
         )
+    fp_suppressed_reason = region.fingerprint_suppressed_reason
+    if fingerprint_candidates:
+        from app.services.intake_fingerprint_search_debug_service import (
+            filter_cross_publisher_fingerprint_recovery_candidates,
+        )
+
+        fingerprint_candidates, fp_cross = filter_cross_publisher_fingerprint_recovery_candidates(
+            session,
+            barcode=normalized_barcode,
+            candidates=fingerprint_candidates,
+            hints_publisher=publisher,
+        )
+        if fp_cross and not fp_suppressed_reason:
+            fp_suppressed_reason = fp_cross
     fp_catalog_id, fp_gcd_id, fp_conf, fp_source = _primary_fingerprint_fields(fingerprint_candidates)
 
     return IntakeGcdRecoveryHints(
@@ -400,7 +414,7 @@ def gather_intake_gcd_recovery_hints(
         fingerprint_match_source=fp_source,
         fingerprint_image_region=region_kind,
         fingerprint_region_safe=region_safe,
-        fingerprint_suppressed_reason=region.fingerprint_suppressed_reason,
+        fingerprint_suppressed_reason=fp_suppressed_reason,
     )
 
 

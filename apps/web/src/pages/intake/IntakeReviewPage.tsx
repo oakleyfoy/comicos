@@ -89,7 +89,42 @@ function intakeNeedsFullCoverPhoto(item: IntakeItem): boolean {
 }
 
 const FULL_COVER_PROMPT =
-  "Barcode was read, but no barcode record exists in GCD or your catalog. Add a full front-cover photo to identify by cover art.";
+  "Barcode was read, but no barcode record exists in GCD or your catalog. Take a full front-cover photo to identify by cover art.";
+
+function FullCoverPhotoActions({
+  itemId,
+  busy,
+  onTakePhoto,
+  onUploadPhoto,
+}: {
+  itemId: number;
+  busy: boolean;
+  onTakePhoto: () => void;
+  onUploadPhoto: () => void;
+}) {
+  return (
+    <>
+      <button
+        type="button"
+        disabled={busy}
+        data-testid={`full-cover-camera-${itemId}`}
+        onClick={onTakePhoto}
+        className="rounded-lg bg-fuchsia-700 px-3 py-1.5 text-xs font-semibold disabled:opacity-50"
+      >
+        Take Full Cover Photo
+      </button>
+      <button
+        type="button"
+        disabled={busy}
+        data-testid={`full-cover-upload-${itemId}`}
+        onClick={onUploadPhoto}
+        className="rounded-lg border border-fuchsia-500/60 px-3 py-1.5 text-xs font-medium text-fuchsia-100 disabled:opacity-50"
+      >
+        Upload Existing Photo
+      </button>
+    </>
+  );
+}
 
 function intakeFingerprintReviewCandidates(item: IntakeItem): IntakeReviewCandidateRow[] {
   if (intakeNeedsFullCoverPhoto(item)) return [];
@@ -264,7 +299,8 @@ export function IntakeReviewPage(): JSX.Element {
   const [pickerQuery, setPickerQuery] = useState("");
   const [pickerResults, setPickerResults] = useState<IntakeCatalogSearchResult[]>([]);
   const [pickerBusy, setPickerBusy] = useState(false);
-  const fullCoverInputRef = useRef<HTMLInputElement | null>(null);
+  const fullCoverCameraInputRef = useRef<HTMLInputElement | null>(null);
+  const fullCoverUploadInputRef = useRef<HTMLInputElement | null>(null);
   const [fullCoverItemId, setFullCoverItemId] = useState<number | null>(null);
   const pollRef = useRef<number | null>(null);
 
@@ -565,18 +601,18 @@ export function IntakeReviewPage(): JSX.Element {
                       </button>
                     ) : null}
                     {needsFullCover ? (
-                      <button
-                        type="button"
-                        disabled={busy}
-                        data-testid={`full-cover-upload-${item.id}`}
-                        onClick={() => {
+                      <FullCoverPhotoActions
+                        itemId={item.id}
+                        busy={busy}
+                        onTakePhoto={() => {
                           setFullCoverItemId(item.id);
-                          fullCoverInputRef.current?.click();
+                          fullCoverCameraInputRef.current?.click();
                         }}
-                        className="rounded-lg bg-fuchsia-700 px-3 py-1.5 text-xs font-semibold disabled:opacity-50"
-                      >
-                        Add full-cover photo
-                      </button>
+                        onUploadPhoto={() => {
+                          setFullCoverItemId(item.id);
+                          fullCoverUploadInputRef.current?.click();
+                        }}
+                      />
                     ) : null}
                     <button
                       type="button"
@@ -608,11 +644,26 @@ export function IntakeReviewPage(): JSX.Element {
       </div>
 
       <input
-        ref={fullCoverInputRef}
+        ref={fullCoverCameraInputRef}
+        type="file"
+        accept="image/*"
+        capture="environment"
+        className="hidden"
+        data-testid="full-cover-camera-input"
+        onChange={(e) => {
+          const file = e.target.files?.[0];
+          const id = fullCoverItemId;
+          e.target.value = "";
+          if (!file || id == null) return;
+          void runAction(id, () => uploadIntakeFullCoverPhoto(id, file));
+        }}
+      />
+      <input
+        ref={fullCoverUploadInputRef}
         type="file"
         accept="image/*"
         className="hidden"
-        data-testid="full-cover-file-input"
+        data-testid="full-cover-upload-input"
         onChange={(e) => {
           const file = e.target.files?.[0];
           const id = fullCoverItemId;
