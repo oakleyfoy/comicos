@@ -22,7 +22,7 @@ class IntakeP1061Trace:
     fingerprint_search_skipped: bool = False
     skip_fingerprint_search: bool = False
     full_cover_followup_required: bool = False
-    fingerprint_region_safe: bool = True
+    fingerprint_region_safe: bool = False
     fingerprint_image_region: str = "unknown"
 
     def record(self, tag: str, payload: dict[str, Any]) -> None:

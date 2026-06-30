@@ -175,7 +175,7 @@ def test_full_cover_region_safe() -> None:
         geometry=_full_cover_phone_geometry(width=800, height=1200),
     )
     assert region.fingerprint_region_safe is True
-    assert region.fingerprint_image_region in {REGION_FULL_COVER, "unknown"}
+    assert region.fingerprint_image_region == REGION_FULL_COVER
 
 
 def test_tall_partial_cover_left_barcode_frame_unsafe() -> None:

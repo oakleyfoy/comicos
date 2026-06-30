@@ -16,8 +16,8 @@ from app.services.photo_import_storage_service import REPO_ROOT, resolve_photo_i
 
 FULL_COVER_REASON_CODE = "needs_full_cover_photo"
 FULL_COVER_USER_MESSAGE = (
-    "Barcode was read, but no barcode record exists in GCD or your catalog. "
-    "Add a full front-cover photo to identify by cover art."
+    "Barcode was read, but no safe catalog match was found. "
+    "Add a full front-cover photo to identify this issue."
 )
 
 
@@ -57,7 +57,68 @@ def resolve_intake_recognition_image_path(
     return primary_path, False
 
 
+from app.services.catalog_ingestion_service import normalize_upc
 from app.services.intake_scanner_barcode_authority_service import p106_gap_is_exact_barcode_authority
+
+
+def full_upc_plus_five_decoded(normalized: str) -> bool:
+    return len(normalize_upc(normalized)) >= 17
+
+
+def recognition_image_safe_for_fingerprint_review(
+    *,
+    recognition_region: FingerprintRegionAssessment,
+    has_full_cover_followup_image: bool,
+) -> bool:
+    """Fingerprint review is allowed only on an attached full-cover image or a classified full cover."""
+    if has_full_cover_followup_image:
+        return True
+    return (
+        recognition_region.fingerprint_image_region == REGION_FULL_COVER
+        and recognition_region.fingerprint_region_safe is True
+    )
+
+
+def all_barcode_authority_sources_exhausted(
+    *,
+    normalized: str,
+    candidate: dict[str, Any] | None,
+    local_catalog_hit: bool,
+    p106_exact_barcode_authority: bool,
+    gap_diag: dict[str, Any] | None,
+) -> bool:
+    """Local / learned / GCD barcode / ComicVine attach paths all failed for this scan."""
+    if candidate is not None:
+        return False
+    if not full_upc_plus_five_decoded(normalized):
+        return False
+    if local_catalog_hit or p106_exact_barcode_authority:
+        return False
+    return gcd_barcode_lookup_missed(gap_diag)
+
+
+def require_full_cover_before_fingerprint_review(
+    *,
+    normalized: str,
+    candidate: dict[str, Any] | None,
+    local_catalog_hit: bool,
+    p106_exact_barcode_authority: bool,
+    gap_diag: dict[str, Any] | None,
+    recognition_region: FingerprintRegionAssessment,
+    has_full_cover_followup_image: bool,
+) -> bool:
+    if not all_barcode_authority_sources_exhausted(
+        normalized=normalized,
+        candidate=candidate,
+        local_catalog_hit=local_catalog_hit,
+        p106_exact_barcode_authority=p106_exact_barcode_authority,
+        gap_diag=gap_diag,
+    ):
+        return False
+    return not recognition_image_safe_for_fingerprint_review(
+        recognition_region=recognition_region,
+        has_full_cover_followup_image=has_full_cover_followup_image,
+    )
 
 
 def gcd_barcode_lookup_missed(gap_diag: dict[str, Any] | None) -> bool:

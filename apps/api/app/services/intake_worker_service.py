@@ -546,6 +546,7 @@ def _intake_full_cover_followup_gate(
     from app.services.intake_full_cover_followup_service import (
         gcd_barcode_lookup_missed,
         intake_has_full_cover_followup_image,
+        require_full_cover_before_fingerprint_review,
         should_require_full_cover_followup,
     )
 
@@ -568,6 +569,16 @@ def _intake_full_cover_followup_gate(
         p106_exact_barcode_authority=p106_exact_barcode_authority,
         barcode_decoded=bool(normalized),
     )
+    if require_full_cover_before_fingerprint_review(
+        normalized=normalized,
+        candidate=None,
+        local_catalog_hit=local_catalog_hit,
+        p106_exact_barcode_authority=p106_exact_barcode_authority,
+        gap_diag=gap_diag,
+        recognition_region=recognition_region,
+        has_full_cover_followup_image=has_full_cover_image,
+    ):
+        full_cover_required = True
     if barcode_path_miss and (full_cover_required or unsafe_fingerprint_region) and not has_full_cover_image:
         full_cover_required = True
     skip_fp = full_cover_required or not recognition_region.fingerprint_region_safe
@@ -1184,6 +1195,7 @@ def process_intake_item(session: Session, *, item_id: int) -> str:
                         apply_full_cover_followup_to_diagnosis,
                         gcd_barcode_lookup_missed,
                         intake_has_full_cover_followup_image,
+                        require_full_cover_before_fingerprint_review,
                         should_require_full_cover_followup,
                     )
                     from app.services.intake_p106_1_intake_debug_service import (
@@ -1224,6 +1236,20 @@ def process_intake_item(session: Session, *, item_id: int) -> str:
                     )
                     if barcode_path_miss and (full_cover_required or unsafe_fingerprint_region) and not has_full_cover_image:
                         full_cover_required = True
+                    if require_full_cover_before_fingerprint_review(
+                        normalized=normalized,
+                        candidate=candidate,
+                        local_catalog_hit=local_catalog_hit,
+                        p106_exact_barcode_authority=p106_exact_barcode_authority,
+                        gap_diag=gap_diag,
+                        recognition_region=recognition_region,
+                        has_full_cover_followup_image=has_full_cover_image,
+                    ):
+                        full_cover_required = True
+                        gap_diag.pop("needs_review_top_candidates", None)
+                        gap_diag.pop("fingerprint_review", None)
+                        gap_diag.pop("review_decision", None)
+                        _clear_fingerprint_artifacts(session, item_id=int(item.id or 0), gap_diag=gap_diag)
 
                     debug_payload: dict[str, Any] = {
                         "intake_item_id": item_id,
@@ -1278,7 +1304,7 @@ def process_intake_item(session: Session, *, item_id: int) -> str:
                             primary_region,
                             recognition_region=recognition_region,
                         )
-                        _clear_candidates(session, item_id)
+                        _clear_fingerprint_artifacts(session, item_id=int(item.id or 0), gap_diag=gap_diag)
                         try:
                             _apply_p106_diagnosis_to_intake_item(item, gap_diag=gap_diag)
                         except Exception:

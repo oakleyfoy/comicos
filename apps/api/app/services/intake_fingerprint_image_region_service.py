@@ -24,6 +24,7 @@ SUPPRESSED_BARCODE_REGION = "barcode_region_crop"
 SUPPRESSED_UPC_DOMINATED = "upc_dominated_crop"
 SUPPRESSED_BARCODE_DOMINATED_FRAME = "barcode_dominated_frame"
 SUPPRESSED_UNSAFE_PARTIAL_COVER = "unsafe_partial_cover_barcode_frame"
+SUPPRESSED_UNKNOWN_REGION = "unknown_crop_requires_full_cover"
 
 
 @dataclass(frozen=True)
@@ -189,8 +190,8 @@ def assess_fingerprint_image_region(
     if w <= 0 or h <= 0:
         return FingerprintRegionAssessment(
             fingerprint_image_region=REGION_UNKNOWN,
-            fingerprint_region_safe=True,
-            fingerprint_suppressed_reason=None,
+            fingerprint_region_safe=False,
+            fingerprint_suppressed_reason=SUPPRESSED_UNKNOWN_REGION,
             width=w,
             height=h,
             barcode_crop_width=crop_w,
@@ -252,13 +253,22 @@ def assess_fingerprint_image_region(
             p105_barcode_strip_layout=strip_layout,
         )
     if h >= 400 and 0.45 <= ratio <= 1.65 and fe_overlap < 55.0:
-        region = REGION_FULL_COVER
-    else:
-        region = REGION_UNKNOWN
+        return FingerprintRegionAssessment(
+            fingerprint_image_region=REGION_FULL_COVER,
+            fingerprint_region_safe=True,
+            fingerprint_suppressed_reason=None,
+            width=w,
+            height=h,
+            barcode_crop_width=crop_w,
+            barcode_crop_height=crop_h,
+            barcode_region_overlap_percent=fe_overlap,
+            main_bars_overlap_percent=mb_overlap,
+            p105_barcode_strip_layout=strip_layout,
+        )
     return FingerprintRegionAssessment(
-        fingerprint_image_region=region,
-        fingerprint_region_safe=True,
-        fingerprint_suppressed_reason=None,
+        fingerprint_image_region=REGION_UNKNOWN,
+        fingerprint_region_safe=False,
+        fingerprint_suppressed_reason=SUPPRESSED_UNKNOWN_REGION,
         width=w,
         height=h,
         barcode_crop_width=crop_w,
