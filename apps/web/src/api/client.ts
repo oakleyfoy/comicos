@@ -34361,4 +34361,13 @@ export const apiClient = {
   },
 };
 
+/** Authenticated JSON request against VITE_API_BASE_URL (same as apiClient). */
+export async function apiRequest<T>(path: string, init?: RequestInit): Promise<T> {
+  return request<T>(path, init);
+}
+
+export async function apiRequestEmpty(path: string, init?: RequestInit): Promise<void> {
+  return requestEmpty(path, init);
+}
+
 export { ApiError, getStoredToken };

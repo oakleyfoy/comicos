@@ -1,6 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 
-import { getStoredToken } from "../api/client";
+import { ApiError, apiRequest, apiRequestEmpty } from "../api/client";
 import { useAuth } from "../auth/AuthContext";
 
 export type CollectionStats = {
@@ -37,23 +37,14 @@ type CollectionContextValue = {
 
 const CollectionContext = createContext<CollectionContextValue | null>(null);
 
-async function apiFetch<T>(token: string, path: string, init?: RequestInit): Promise<T> {
-  const resp = await fetch(path, {
-    ...init,
-    headers: {
-      Authorization: `Bearer ${token}`,
-      "Content-Type": "application/json",
-      ...(init?.headers ?? {}),
-    },
-  });
-  if (!resp.ok) {
-    const text = await resp.text();
-    throw new Error(text || resp.statusText);
+function formatCollectionError(err: unknown): string {
+  if (err instanceof ApiError) {
+    return err.message;
   }
-  if (resp.status === 204) {
-    return undefined as T;
+  if (err instanceof Error) {
+    return err.message;
   }
-  return (await resp.json()) as T;
+  return "Unable to load collections.";
 }
 
 export function CollectionProvider({ children }: { children: ReactNode }) {
@@ -64,8 +55,7 @@ export function CollectionProvider({ children }: { children: ReactNode }) {
   const [error, setError] = useState<string | null>(null);
 
   const refresh = useCallback(async () => {
-    const token = getStoredToken();
-    if (!token) {
+    if (!isAuthenticated) {
       setCollections([]);
       setActiveCollectionId(null);
       setError(null);
@@ -74,34 +64,27 @@ export function CollectionProvider({ children }: { children: ReactNode }) {
     setLoading(true);
     setError(null);
     try {
-      const body = await apiFetch<{ active_collection_id: number | null; items: CollectionSummary[] }>(
-        token,
+      const body = await apiRequest<{ active_collection_id: number | null; items: CollectionSummary[] }>(
         "/api/collections",
       );
       setCollections(body.items);
       setActiveCollectionId(body.active_collection_id);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Unable to load collections.");
+      setError(formatCollectionError(err));
       setCollections([]);
       setActiveCollectionId(null);
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [isAuthenticated]);
 
   useEffect(() => {
-    if (isAuthenticated) {
-      void refresh();
-    }
-  }, [isAuthenticated, refresh]);
+    void refresh();
+  }, [refresh]);
 
   const setActiveCollection = useCallback(
     async (collectionId: number) => {
-      const token = getStoredToken();
-      if (!token) {
-        return;
-      }
-      await apiFetch(token, "/api/collections/active", {
+      await apiRequest("/api/collections/active", {
         method: "POST",
         body: JSON.stringify({ collection_id: collectionId }),
       });
@@ -112,11 +95,7 @@ export function CollectionProvider({ children }: { children: ReactNode }) {
 
   const createCollection = useCallback(
     async (name: string) => {
-      const token = getStoredToken();
-      if (!token) {
-        throw new Error("Not authenticated");
-      }
-      const row = await apiFetch<CollectionSummary>(token, "/api/collections", {
+      const row = await apiRequest<CollectionSummary>("/api/collections", {
         method: "POST",
         body: JSON.stringify({ name, collection_type: "test" }),
       });
@@ -128,11 +107,7 @@ export function CollectionProvider({ children }: { children: ReactNode }) {
 
   const cloneCollection = useCallback(
     async (sourceId: number, name?: string) => {
-      const token = getStoredToken();
-      if (!token) {
-        throw new Error("Not authenticated");
-      }
-      const row = await apiFetch<CollectionSummary>(token, `/api/collections/${sourceId}/clone`, {
+      const row = await apiRequest<CollectionSummary>(`/api/collections/${sourceId}/clone`, {
         method: "POST",
         body: JSON.stringify(name ? { name } : {}),
       });
@@ -144,11 +119,7 @@ export function CollectionProvider({ children }: { children: ReactNode }) {
 
   const resetCollection = useCallback(
     async (collectionId: number) => {
-      const token = getStoredToken();
-      if (!token) {
-        return;
-      }
-      await apiFetch(token, `/api/collections/${collectionId}/reset`, {
+      await apiRequest(`/api/collections/${collectionId}/reset`, {
         method: "POST",
         body: JSON.stringify({}),
       });
@@ -159,11 +130,7 @@ export function CollectionProvider({ children }: { children: ReactNode }) {
 
   const deleteCollection = useCallback(
     async (collectionId: number) => {
-      const token = getStoredToken();
-      if (!token) {
-        return;
-      }
-      await apiFetch(token, `/api/collections/${collectionId}`, { method: "DELETE" });
+      await apiRequestEmpty(`/api/collections/${collectionId}`, { method: "DELETE" });
       await refresh();
     },
     [refresh],
