@@ -401,6 +401,89 @@ def test_facsimile_surfaces_asm_122_review_candidates(
     assert {88300, 88301} <= {row["gcd_issue_id"] for row in diag["gcd_non_barcode_ranked"]}
 
 
+@patch("app.services.gpt_comic_read_service.read_comic_with_gpt")
+@patch("app.services.p106_1_gcd_non_barcode_recovery_service.get_settings")
+@patch("app.services.p106_1_gcd_non_barcode_recovery_service.extract_ocr_signal")
+def test_vision_fallback_recovers_cover_when_tesseract_garbles(
+    mock_ocr: MagicMock,
+    mock_settings: MagicMock,
+    mock_vision: MagicMock,
+    session: Session,
+    tmp_path: Path,
+) -> None:
+    from types import SimpleNamespace
+
+    # Tesseract reads the barcode strip as garbage (the production failure mode).
+    mock_ocr.return_value = MagicMock(
+        confidence=0.2,
+        title='9606"20629',
+        issue_number="1",
+        publisher=None,
+        raw_text='9606"20629 1',
+    )
+    mock_settings.return_value = SimpleNamespace(
+        photo_import_vision_sandbox=True,
+        openai_api_key="sk-test",
+    )
+    mock_vision.return_value = SimpleNamespace(
+        series="Amazing Spider-Man",
+        issue_number="122",
+        publisher="Marvel",
+        issue_title="The Night Gwen Stacy Died",
+        variant_description="Facsimile Edition",
+        year="2023",
+        reasoning="Modern facsimile reprint of the 1973 cover.",
+        confidence=0.84,
+    )
+    item = _FakeIntakeItem(matched_issue_number="1", matched_publisher="Marvel")
+    hints = gather_intake_gcd_recovery_hints(
+        session,
+        item=item,
+        normalized_barcode="75960620629200111",
+        image_path=None,
+        image_bytes=b"fake-cover",
+        p105=None,
+        fingerprint_region_safe=True,
+        fingerprint_image_region="full_cover",
+    )
+    assert hints.vision_cover_read_used is True
+    assert hints.series == "Amazing Spider-Man"
+    assert hints.issue_number == "122"
+    assert hints.publisher == "Marvel"
+    assert hints.facsimile_or_reprint is True
+    assert hints.barcode_issue_authoritative is False
+
+
+@patch("app.services.p106_1_gcd_non_barcode_recovery_service.get_settings")
+@patch("app.services.p106_1_gcd_non_barcode_recovery_service.extract_ocr_signal")
+def test_vision_fallback_skipped_when_sandbox_disabled(
+    mock_ocr: MagicMock,
+    mock_settings: MagicMock,
+    session: Session,
+    tmp_path: Path,
+) -> None:
+    from types import SimpleNamespace
+
+    mock_ocr.return_value = MagicMock(
+        confidence=0.2, title='9606"20629', issue_number="1", publisher=None, raw_text="garbage"
+    )
+    mock_settings.return_value = SimpleNamespace(
+        photo_import_vision_sandbox=False, openai_api_key="sk-test"
+    )
+    item = _FakeIntakeItem(matched_issue_number="1", matched_publisher="Marvel")
+    hints = gather_intake_gcd_recovery_hints(
+        session,
+        item=item,
+        normalized_barcode="75960620629200111",
+        image_path=None,
+        image_bytes=b"fake-cover",
+        p105=None,
+        fingerprint_region_safe=True,
+        fingerprint_image_region="full_cover",
+    )
+    assert hints.vision_cover_read_used is False
+
+
 def test_has_reliable_series_hint_rejects_blank_and_generic() -> None:
     assert has_reliable_series_hint(None) is False
     assert has_reliable_series_hint("") is False

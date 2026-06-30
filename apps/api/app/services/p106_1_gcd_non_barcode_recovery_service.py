@@ -12,6 +12,7 @@ from typing import Any
 
 from sqlmodel import Session
 
+from app.core.config import get_settings
 from app.models.catalog_master import CatalogIssue
 from app.services.barcode_scan_consensus_service import normalize_scan_preserving_supplement
 from app.services.barcode_validation_service import (
@@ -124,6 +125,9 @@ class IntakeGcdRecoveryHints:
     displayed_issue_number: str | None = None
     barcode_supplement_issue_number: str | None = None
     barcode_issue_authoritative: bool = True
+    # True when the cover series/issue came from the GPT vision read (used as a
+    # fallback when local Tesseract OCR fails to read a reliable series off the cover).
+    vision_cover_read_used: bool = False
     series_norm_aliases: list[str] = field(default_factory=list)
     ocr_confidence: float = 0.0
     raw_ocr_text_excerpt: str | None = None
@@ -277,6 +281,68 @@ def _parse_year_hint(raw: Any) -> int | None:
     return None
 
 
+@dataclass
+class _VisionCoverRead:
+    series: str | None
+    issue_number: str | None
+    publisher: str | None
+    year: int | None
+    facsimile: bool
+    confidence: float
+    reasoning_excerpt: str | None
+
+
+def _vision_cover_read_for_recovery(
+    image_bytes: bytes,
+    *,
+    intake_item_id: int,
+) -> _VisionCoverRead | None:
+    """Read the cover with GPT vision when local OCR can't.
+
+    Tesseract frequently reads the barcode strip digits instead of the printed
+    series/issue (e.g. garbage like ``9606"20629``), which defeats the facsimile
+    path. The GPT read reliably returns series/issue/publisher and a
+    variant_description that exposes facsimile/reprint editions. Gated to the
+    full-cover review path and behind the vision-sandbox flag, so it doesn't run
+    on every barcode-strip scan. All failures degrade silently.
+    """
+    settings = get_settings()
+    if not getattr(settings, "photo_import_vision_sandbox", False):
+        return None
+    if not getattr(settings, "openai_api_key", None):
+        return None
+    try:
+        from app.services.gpt_comic_read_service import (
+            GptComicReadError,
+            read_comic_with_gpt,
+        )
+
+        result = read_comic_with_gpt(image_bytes, filename=f"intake-{intake_item_id}")
+    except Exception as exc:  # noqa: BLE001 - vision is best-effort
+        logger.warning(
+            "p106_1.vision_cover_read_failed item_id=%s error=%s",
+            intake_item_id,
+            str(exc)[:200],
+        )
+        return None
+    series = (result.series or "").strip() or None
+    if not series:
+        return None
+    blob = " ".join(
+        str(part or "")
+        for part in (result.variant_description, result.issue_title, result.reasoning)
+    ).lower()
+    return _VisionCoverRead(
+        series=series,
+        issue_number=(result.issue_number or "").strip() or None,
+        publisher=(result.publisher or "").strip() or None,
+        year=_parse_year_hint(result.year),
+        facsimile=bool(_REPRINT_DIGEST.search(blob)),
+        confidence=float(result.confidence or 0.0),
+        reasoning_excerpt=(result.reasoning or "").strip()[:300] or None,
+    )
+
+
 def gather_intake_gcd_recovery_hints(
     session: Session,
     *,
@@ -329,6 +395,53 @@ def gather_intake_gcd_recovery_hints(
         facsimile = facsimile or bool(
             _REPRINT_DIGEST.search(str(getattr(p105, "correction_reason", "") or "").lower())
         )
+
+    # GPT vision fallback for the full-cover review path: when local OCR can't read
+    # a reliable series off the cover (Tesseract often grabs the barcode strip), ask
+    # the vision model. This is what makes the facsimile path work in production.
+    from app.services.intake_fingerprint_image_region_service import REGION_FULL_COVER
+
+    vision_cover_read_used = False
+    tess_series_candidate = series or ocr_title
+    # A usable cover series must contain real words, not just barcode digits.
+    # has_reliable_series_hint() treats all-digit tokens as reliable, so it can't be
+    # used here (Tesseract's barcode-strip garbage like '9606"20629' would pass it).
+    tess_has_word_series = bool(re.search(r"[A-Za-z]{3,}", tess_series_candidate or ""))
+    full_cover_region = (
+        fingerprint_image_region == REGION_FULL_COVER and fingerprint_region_safe is not False
+    )
+    local_ocr_weak = (
+        not tess_has_word_series or not ocr_engine_available or ocr_confidence < 0.5
+    )
+    if (
+        image_bytes
+        and full_cover_region
+        and not full_cover_followup_required
+        and local_ocr_weak
+    ):
+        vision = _vision_cover_read_for_recovery(
+            image_bytes, intake_item_id=int(getattr(item, "id", 0) or 0)
+        )
+        if vision is not None:
+            vision_cover_read_used = True
+            ocr_title = vision.series or ocr_title
+            ocr_issue = vision.issue_number or ocr_issue
+            ocr_publisher = vision.publisher or ocr_publisher
+            facsimile = facsimile or vision.facsimile
+            ocr_confidence = max(ocr_confidence, vision.confidence)
+            if vision.year is not None and year is None:
+                year = vision.year
+            if vision.reasoning_excerpt:
+                raw_ocr_excerpt = (raw_ocr_excerpt or "") + f" [vision] {vision.reasoning_excerpt}"
+            logger.info(
+                "p106_1.vision_cover_read item_id=%s series=%r issue=%r publisher=%r facsimile=%s conf=%.2f",
+                getattr(item, "id", None),
+                vision.series,
+                vision.issue_number,
+                vision.publisher,
+                vision.facsimile,
+                vision.confidence,
+            )
 
     if not publisher and ocr_publisher:
         publisher = ocr_publisher
@@ -429,6 +542,7 @@ def gather_intake_gcd_recovery_hints(
         displayed_issue_number=displayed_issue,
         barcode_supplement_issue_number=encoded_issue,
         barcode_issue_authoritative=barcode_issue_authoritative,
+        vision_cover_read_used=vision_cover_read_used,
         series_norm_aliases=aliases,
         ocr_confidence=ocr_confidence,
         raw_ocr_text_excerpt=raw_ocr_excerpt,
@@ -1206,6 +1320,7 @@ def _recovery_hints_payload(hints: IntakeGcdRecoveryHints) -> dict[str, Any]:
         "displayed_issue_number": hints.displayed_issue_number,
         "barcode_supplement_issue_number": hints.barcode_supplement_issue_number,
         "barcode_issue_authoritative": hints.barcode_issue_authoritative,
+        "vision_cover_read_used": hints.vision_cover_read_used,
         "series_hint_reliable": has_reliable_series_hint(hints.series),
         "ocr_engine_available": hints.ocr_engine_available,
         "ocr_error": hints.ocr_error,
