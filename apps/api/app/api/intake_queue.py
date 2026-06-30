@@ -393,6 +393,36 @@ async def full_cover_photo_endpoint(
     return _item_response(session, item)
 
 
+@intake_router.post(
+    "/sessions/{token}/items/{item_id}/full-cover-photo",
+    response_model=IntakeItemRead,
+)
+async def session_full_cover_photo_endpoint(
+    token: str,
+    item_id: int,
+    file: UploadFile = File(...),
+    session: Session = Depends(get_session),
+) -> IntakeItemRead:
+    """Token-authed full-cover upload for the phone hand-off (no login required).
+
+    The desktop review page shows a QR/link that opens this item on the owner's
+    phone; the phone captures the cover with its camera and POSTs it here. The
+    session token is the auth boundary (same as enqueue), and the owner is derived
+    from the session, so we never expose another user's items.
+    """
+    row = get_intake_session_by_token_or_404(session, token=token)
+    item = session.get(IntakeSessionItem, item_id)
+    if item is None or int(item.session_id) != int(row.id or 0):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Intake item not found")
+    item = await attach_full_cover_photo_to_intake_item(
+        session,
+        item_id=item_id,
+        owner_user_id=int(row.user_id),
+        upload=file,
+    )
+    return _item_response(session, item)
+
+
 @intake_router.post("/sessions/{token}/add-all-high-confidence", response_model=IntakeAddAllResponse)
 def add_all_endpoint(
     token: str,

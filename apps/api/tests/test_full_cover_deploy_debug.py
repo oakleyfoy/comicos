@@ -153,6 +153,68 @@ def test_stale_candidates_not_rendered_after_full_cover(tmp_path: Path, monkeypa
         assert read.barcode_read.get("full_cover_storage_path")
 
 
+def test_token_full_cover_endpoint_reprocesses(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """The phone hand-off endpoint authes by session token (no login) and requeues."""
+    primary = tmp_path / "scan.jpg"
+    primary.write_bytes(_jpeg_bytes(900, 280))
+    monkeypatch.setattr(svc, "resolve_photo_import_storage_path", lambda rel, **k: primary)
+    monkeypatch.setattr(svc, "relative_path_under_repo_root", lambda p: Path(p).name)
+    kicked: list[int] = []
+    monkeypatch.setattr(svc, "run_intake_item_async", lambda item_id: kicked.append(item_id))
+
+    from app.api.intake_queue import session_full_cover_photo_endpoint
+
+    engine = _engine()
+    with Session(engine) as session:
+        item = _seed_item_with_candidates(session, storage_path="scan.jpg")
+        item_id = int(item.id)
+
+        read = asyncio.run(
+            session_full_cover_photo_endpoint(
+                token="tok-debug",
+                item_id=item_id,
+                file=_upload(_jpeg_bytes(800, 1200)),
+                session=session,
+            )
+        )
+
+        assert kicked == [item_id]
+        assert read.status == ITEM_QUEUED
+        # Stale candidates cleared via the shared reprocess path.
+        assert svc.candidates_for_item(session, item_id=item_id) == []
+
+
+def test_token_full_cover_endpoint_rejects_foreign_item(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """An item that does not belong to the token's session must 404."""
+    from fastapi import HTTPException
+
+    from app.api.intake_queue import session_full_cover_photo_endpoint
+
+    engine = _engine()
+    with Session(engine) as session:
+        item = _seed_item_with_candidates(session, storage_path="scan.jpg")
+        # Second session owned by a different token; its token can't touch the first item.
+        other = IntakeSession(
+            user_id=1,
+            session_token="tok-other",
+            status="active",
+            expires_at=datetime(2099, 1, 1, tzinfo=timezone.utc),
+        )
+        session.add(other)
+        session.commit()
+
+        with pytest.raises(HTTPException) as exc:
+            asyncio.run(
+                session_full_cover_photo_endpoint(
+                    token="tok-other",
+                    item_id=int(item.id),
+                    file=_upload(_jpeg_bytes(800, 1200)),
+                    session=session,
+                )
+            )
+        assert exc.value.status_code == 404
+
+
 def test_build_info_reports_feature_flags() -> None:
     from app.core.config import get_settings
 

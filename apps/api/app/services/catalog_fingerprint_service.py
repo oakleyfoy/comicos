@@ -39,11 +39,26 @@ def hamming_distance(left: str, right: str) -> int:
     return sum(1 for i in range(length) if left[i] != right[i]) + abs(len(left) - len(right))
 
 
+# A genuine perceptual-hash cover match sits within ~10-12 differing bits out of 64.
+# Anything looser is a coincidental layout/color collision, not the same cover.
+STRONG_MATCH_MAX_DISTANCE = 12
+
+
 def hash_match_confidence(distance: int, *, bits: int = 64) -> float:
+    """Honest distance->confidence: 0 distance ~= 0.99, and it decays linearly to 0.
+
+    There is no artificial floor. Previously this returned >= 0.60 for *any* image
+    (even a maximally different one), which let unrelated covers surface as "91%"
+    nearest neighbors. Confidence now tracks real Hamming distance.
+    """
     if distance <= 0:
-        return 0.98
+        return 0.99
     ratio = 1.0 - (distance / max(bits, 1))
-    return max(0.0, min(0.97, 0.6 + ratio * 0.37))
+    return max(0.0, min(0.99, ratio))
+
+
+def is_strong_fingerprint_match(distance: int) -> bool:
+    return 0 <= distance <= STRONG_MATCH_MAX_DISTANCE
 
 
 def fingerprint_image_path(path: str | Path) -> tuple[str, str, str]:
@@ -131,16 +146,28 @@ def _fingerprint_distance_and_confidence(
     dhash: str | None,
     ahash: str | None,
 ) -> tuple[int, float] | None:
-    distances: list[int] = []
+    pairs: list[tuple[str, str]] = []
     if phash and row.phash:
-        distances.append(hamming_distance(phash, row.phash))
+        pairs.append((phash, row.phash))
     if dhash and row.dhash:
-        distances.append(hamming_distance(dhash, row.dhash))
+        pairs.append((dhash, row.dhash))
     if ahash and row.ahash:
-        distances.append(hamming_distance(ahash, row.ahash))
+        pairs.append((ahash, row.ahash))
+    # The extractor currently stores phash == ahash, so de-duplicate identical
+    # probe/candidate pairs to keep one signal from being counted twice.
+    distances: list[int] = []
+    seen: set[tuple[str, str]] = set()
+    for probe, candidate in pairs:
+        if (probe, candidate) in seen:
+            continue
+        seen.add((probe, candidate))
+        distances.append(hamming_distance(probe, candidate))
     if not distances:
         return None
-    distance = min(distances)
+    # Require broad agreement across the independent hashes: a true cover match is
+    # close on all of them. Using the *mean* (not the best-of-N minimum) stops a
+    # single coincidentally-close hash from inflating an unrelated cover.
+    distance = round(sum(distances) / len(distances))
     return distance, hash_match_confidence(distance)
 
 

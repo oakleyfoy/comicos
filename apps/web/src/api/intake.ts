@@ -234,6 +234,40 @@ export async function uploadIntakeFullCoverPhoto(itemId: number, blob: Blob): Pr
   });
 }
 
+/**
+ * Token-authed full-cover upload used by the phone hand-off capture page.
+ * No login is required (the session token is the auth boundary), so this calls
+ * the API directly rather than attaching the owner bearer token.
+ */
+export async function uploadIntakeFullCoverPhotoByToken(
+  token: string,
+  itemId: number,
+  blob: Blob,
+): Promise<IntakeItem> {
+  const form = new FormData();
+  form.append("file", blob, "full_cover.jpg");
+  const res = await fetch(
+    `${API_BASE}/api/v1/intake/sessions/${token}/items/${itemId}/full-cover-photo`,
+    { method: "POST", body: form },
+  );
+  if (!res.ok) {
+    let detail = `full-cover upload failed (${res.status})`;
+    try {
+      const body = (await res.json()) as { detail?: string };
+      if (body.detail) detail = body.detail;
+    } catch {
+      /* ignore */
+    }
+    throw new IntakeApiError(detail, res.status);
+  }
+  return (await res.json()) as IntakeItem;
+}
+
+/** Absolute URL to an intake item's original scan image (token-authed, no login). */
+export function intakeItemImageUrlByToken(token: string, itemId: number): string {
+  return `${API_BASE}/api/v1/intake/sessions/${token}/items/${itemId}/image`;
+}
+
 export function addAllHighConfidence(
   token: string,
 ): Promise<{ added: number; candidates: number; skipped?: string[] }> {

@@ -32,6 +32,7 @@ import { PhotoImportVisionSandboxDashboardPage } from "./pages/ops/PhotoImportVi
 import { PhotoImportMobilePage } from "./pages/addComics/PhotoImportMobilePage";
 import { IntakeScannerPage } from "./pages/intake/IntakeScannerPage";
 import { IntakeReviewPage } from "./pages/intake/IntakeReviewPage";
+import { IntakeFullCoverCapturePage } from "./pages/intake/IntakeFullCoverCapturePage";
 import { MarketplaceSearchDashboardPage } from "./pages/MarketplaceSearchDashboardPage";
 import { MarketplaceCommandCenterPage } from "./pages/MarketplaceCommandCenterPage";
 import { MarketplaceCoverageDashboardPage } from "./pages/MarketplaceCoverageDashboardPage";
@@ -280,6 +281,10 @@ export default function App() {
       <Route path="/photo-import/mobile/:token" element={<PhotoImportMobilePage />} />
       <Route path="/intake/scan" element={<IntakeScannerPage />} />
       <Route path="/intake/scan/:token" element={<IntakeScannerPage />} />
+      <Route
+        path="/intake/full-cover/:token/:itemId"
+        element={<IntakeFullCoverCapturePage />}
+      />
       <Route element={<ProtectedRoute />}>
         <Route element={<CollectorOnboardingGate />}>
         <Route path="/collector-onboarding" element={<CollectorOnboardingPage />} />

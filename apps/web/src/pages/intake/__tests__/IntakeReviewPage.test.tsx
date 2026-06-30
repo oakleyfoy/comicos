@@ -1,9 +1,31 @@
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import * as intake from "../../../api/intake";
 import { IntakeReviewPage } from "../IntakeReviewPage";
+
+vi.mock("qrcode", () => ({
+  // Plain function so vi.restoreAllMocks() can't wipe the resolved value.
+  default: { toDataURL: () => Promise.resolve("data:image/png;base64,qr") },
+}));
+
+function stubCoarsePointer(coarse: boolean) {
+  vi.stubGlobal(
+    "matchMedia",
+    (query: string) =>
+      ({
+        matches: coarse,
+        media: query,
+        addEventListener: () => undefined,
+        removeEventListener: () => undefined,
+        addListener: () => undefined,
+        removeListener: () => undefined,
+        onchange: null,
+        dispatchEvent: () => false,
+      }) as unknown as MediaQueryList,
+  );
+}
 
 function renderReview() {
   return render(
@@ -74,6 +96,10 @@ const baseReview = {
 beforeEach(() => {
   cleanup();
   vi.restoreAllMocks();
+});
+
+afterEach(() => {
+  vi.unstubAllGlobals();
 });
 
 describe("IntakeReviewPage", () => {
@@ -236,29 +262,46 @@ describe("IntakeReviewPage", () => {
     expect(screen.getByRole("button", { name: "Rescan" })).toBeInTheDocument();
   });
 
-  it("uploads captured full-cover photo via API", async () => {
+  const fullCoverReview = {
+    ...baseReview,
+    counts: { ...baseReview.counts, needs_full_cover_photo: 1 },
+    items: [
+      {
+        ...baseReview.items[0],
+        id: 42,
+        status: "needs_full_cover_photo",
+        barcode_read: { needs_full_cover_photo: true },
+        candidates: [],
+      },
+    ],
+  };
+
+  it("uploads captured full-cover photo directly on a phone (camera device)", async () => {
+    stubCoarsePointer(true); // phone/tablet: capture happens right here
     const uploadSpy = vi.spyOn(intake, "uploadIntakeFullCoverPhoto").mockResolvedValue({
       ...baseReview.items[0],
       id: 42,
       status: "processing",
     });
-    vi.spyOn(intake, "getIntakeReview").mockResolvedValue({
-      ...baseReview,
-      items: [
-        {
-          ...baseReview.items[0],
-          id: 42,
-          status: "needs_full_cover_photo",
-          barcode_read: { needs_full_cover_photo: true },
-          candidates: [],
-        },
-      ],
-    });
+    vi.spyOn(intake, "getIntakeReview").mockResolvedValue(fullCoverReview);
     renderReview();
     fireEvent.click(await screen.findByTestId("full-cover-camera-42"));
     const input = screen.getByTestId("full-cover-camera-input") as HTMLInputElement;
     const file = new File(["jpeg"], "cover.jpg", { type: "image/jpeg" });
     fireEvent.change(input, { target: { files: [file] } });
     await waitFor(() => expect(uploadSpy).toHaveBeenCalledWith(42, file));
+  });
+
+  it("hands off to the phone via QR on a desktop (no camera)", async () => {
+    stubCoarsePointer(false); // desktop: cannot reach a camera, must hand off
+    vi.spyOn(intake, "getIntakeReview").mockResolvedValue(fullCoverReview);
+    renderReview();
+    fireEvent.click(await screen.findByTestId("full-cover-camera-42"));
+    const modal = await screen.findByTestId("full-cover-handoff-modal");
+    expect(modal).toBeInTheDocument();
+    expect(await screen.findByTestId("full-cover-handoff-qr")).toBeInTheDocument();
+    expect(
+      screen.getByText(/\/intake\/full-cover\/tok-1\/42$/),
+    ).toBeInTheDocument();
   });
 });

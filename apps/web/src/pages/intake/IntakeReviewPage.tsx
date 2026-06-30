@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useParams } from "react-router-dom";
+import QRCode from "qrcode";
 
 import {
   acceptIntakeItem,
@@ -86,6 +87,22 @@ type IntakeReviewCandidateRow = {
 function intakeNeedsFullCoverPhoto(item: IntakeItem): boolean {
   if (item.status === "needs_full_cover_photo") return true;
   return item.barcode_read?.needs_full_cover_photo === true;
+}
+
+/**
+ * A device can take the cover photo *here* only if it actually has a camera the
+ * browser can reach (phones/tablets). On a desktop, the file input ignores
+ * `capture` and just opens a file picker, so we hand off to the phone via QR.
+ */
+function isDirectCameraCaptureDevice(): boolean {
+  if (typeof navigator === "undefined") return false;
+  const ua = navigator.userAgent || "";
+  const mobileUa = /Mobi|Android|iPhone|iPad|iPod|Tablet/i.test(ua);
+  const coarsePointer =
+    typeof window !== "undefined" &&
+    typeof window.matchMedia === "function" &&
+    window.matchMedia("(pointer: coarse)").matches;
+  return mobileUa || coarsePointer;
 }
 
 const FRONTEND_BUILD_SHA =
@@ -308,7 +325,43 @@ export function IntakeReviewPage(): JSX.Element {
   const fullCoverCameraInputRef = useRef<HTMLInputElement | null>(null);
   const fullCoverUploadInputRef = useRef<HTMLInputElement | null>(null);
   const [fullCoverItemId, setFullCoverItemId] = useState<number | null>(null);
+  const [handoffItemId, setHandoffItemId] = useState<number | null>(null);
+  const [handoffQr, setHandoffQr] = useState<string | null>(null);
   const pollRef = useRef<number | null>(null);
+
+  const handoffUrl =
+    handoffItemId != null && token
+      ? `${window.location.origin}/intake/full-cover/${token}/${handoffItemId}`
+      : null;
+
+  useEffect(() => {
+    if (!handoffUrl) {
+      setHandoffQr(null);
+      return;
+    }
+    let active = true;
+    void QRCode.toDataURL(handoffUrl, { width: 240, margin: 1 })
+      .then((url) => {
+        if (active) setHandoffQr(url);
+      })
+      .catch(() => {
+        if (active) setHandoffQr(null);
+      });
+    return () => {
+      active = false;
+    };
+  }, [handoffUrl]);
+
+  const onTakeFullCoverPhoto = (itemId: number) => {
+    setFullCoverItemId(itemId);
+    if (isDirectCameraCaptureDevice()) {
+      // Phone/tablet: open the native camera right here.
+      fullCoverCameraInputRef.current?.click();
+    } else {
+      // Desktop: hand off to the phone via QR/link.
+      setHandoffItemId(itemId);
+    }
+  };
 
   const load = useCallback(async () => {
     if (!token) return;
@@ -617,10 +670,7 @@ export function IntakeReviewPage(): JSX.Element {
                       <FullCoverPhotoActions
                         itemId={item.id}
                         busy={busy}
-                        onTakePhoto={() => {
-                          setFullCoverItemId(item.id);
-                          fullCoverCameraInputRef.current?.click();
-                        }}
+                        onTakePhoto={() => onTakeFullCoverPhoto(item.id)}
                         onUploadPhoto={() => {
                           setFullCoverItemId(item.id);
                           fullCoverUploadInputRef.current?.click();
@@ -685,6 +735,70 @@ export function IntakeReviewPage(): JSX.Element {
           void runAction(id, () => uploadIntakeFullCoverPhoto(id, file));
         }}
       />
+
+      {handoffItemId != null && handoffUrl ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
+          <div
+            className="w-full max-w-sm rounded-2xl border border-fuchsia-500/40 bg-slate-900 p-5 text-center"
+            data-testid="full-cover-handoff-modal"
+          >
+            <h3 className="text-base font-semibold text-fuchsia-100">
+              Take the cover photo on your phone
+            </h3>
+            <p className="mt-1 text-xs text-slate-400">
+              Scan this code with your phone camera. It opens the camera, you snap the cover,
+              and this screen refreshes automatically.
+            </p>
+            {handoffQr ? (
+              <img
+                src={handoffQr}
+                alt="Scan to open the camera on your phone"
+                className="mx-auto mt-4 h-48 w-48 rounded-lg bg-white p-2"
+                data-testid="full-cover-handoff-qr"
+              />
+            ) : (
+              <div className="mx-auto mt-4 h-48 w-48 animate-pulse rounded-lg bg-slate-800" />
+            )}
+            <a
+              href={handoffUrl}
+              target="_blank"
+              rel="noreferrer"
+              className="mt-4 block break-all rounded-lg border border-slate-700 px-3 py-2 text-[11px] text-sky-300"
+            >
+              {handoffUrl}
+            </a>
+            <div className="mt-4 flex justify-center gap-2">
+              <button
+                type="button"
+                className="rounded-lg border border-slate-600 px-3 py-1.5 text-xs font-medium"
+                onClick={() => {
+                  void navigator.clipboard?.writeText(handoffUrl).catch(() => undefined);
+                }}
+              >
+                Copy link
+              </button>
+              <button
+                type="button"
+                className="rounded-lg border border-fuchsia-500/60 px-3 py-1.5 text-xs font-medium text-fuchsia-100"
+                onClick={() => {
+                  setFullCoverItemId(handoffItemId);
+                  fullCoverUploadInputRef.current?.click();
+                  setHandoffItemId(null);
+                }}
+              >
+                Upload a file instead
+              </button>
+              <button
+                type="button"
+                className="rounded-lg bg-slate-700 px-3 py-1.5 text-xs font-semibold"
+                onClick={() => setHandoffItemId(null)}
+              >
+                Done
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
 
       <footer
         className="mx-auto mt-8 max-w-3xl text-center text-[10px] text-slate-600"
