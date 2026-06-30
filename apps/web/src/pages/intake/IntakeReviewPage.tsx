@@ -176,10 +176,36 @@ function intakeComicvineReviewCandidate(item: IntakeItem): IntakeReviewCandidate
   return cv as IntakeReviewCandidateRow;
 }
 
+function intakeRecoveryHintSeries(item: IntakeItem): string {
+  const gap = intakeBarcodeGap(item);
+  const rh = gap?.recovery_hints;
+  if (rh && typeof rh === "object") {
+    const fromRh = typeof (rh as Record<string, unknown>).series === "string"
+      ? String((rh as Record<string, unknown>).series).trim()
+      : typeof (rh as Record<string, unknown>).ocr_title === "string"
+        ? String((rh as Record<string, unknown>).ocr_title).trim()
+        : "";
+    if (fromRh) return fromRh;
+  }
+  return "";
+}
+
+function intakeRecoveryHintIssueNumber(item: IntakeItem): string {
+  const gap = intakeBarcodeGap(item);
+  const rh = gap?.recovery_hints;
+  if (rh && typeof rh === "object") {
+    const num = (rh as Record<string, unknown>).issue_number ?? (rh as Record<string, unknown>).ocr_issue_number;
+    if (typeof num === "string" && num.trim()) return num.trim();
+  }
+  return "";
+}
+
 function intakeHeadline(item: IntakeItem): string {
   const gap = intakeBarcodeGap(item);
   const gapSeries = typeof gap?.gcd_series === "string" ? gap.gcd_series.trim() : "";
   const gapNum = typeof gap?.gcd_issue_number === "string" ? gap.gcd_issue_number.trim() : "";
+  const hintSeries = intakeRecoveryHintSeries(item);
+  const hintNum = intakeRecoveryHintIssueNumber(item);
   const gapAuthoritative =
     gap?.action === "auto_import_available" ||
     (typeof gap?.gcd_match_count === "number" && gap.gcd_match_count === 1);
@@ -192,13 +218,19 @@ function intakeHeadline(item: IntakeItem): string {
         : "";
   const numFromFp = typeof fpTop?.issue_number === "string" ? fpTop.issue_number.trim() : "";
   const series = gapAuthoritative
-    ? gapSeries || item.matched_series?.trim() || seriesFromFp
-    : item.matched_series?.trim() || gapSeries || seriesFromFp;
+    ? gapSeries || item.matched_series?.trim() || seriesFromFp || hintSeries
+    : item.matched_series?.trim() || gapSeries || seriesFromFp || hintSeries;
   const num = gapAuthoritative
-    ? gapNum || item.matched_issue_number?.trim() || numFromFp
-    : item.matched_issue_number?.trim() || gapNum || numFromFp;
+    ? gapNum || item.matched_issue_number?.trim() || numFromFp || hintNum
+    : item.matched_issue_number?.trim() || gapNum || numFromFp || hintNum;
   if (series) {
     return [series, num ? `#${num.replace(/^#/, "")}` : null].filter(Boolean).join(" ");
+  }
+  if (num) {
+    const pub =
+      item.matched_publisher?.trim() ||
+      (typeof gap?.gcd_publisher === "string" ? gap.gcd_publisher.trim() : "");
+    return pub ? `${pub} #${num.replace(/^#/, "")}` : `#${num.replace(/^#/, "")}`;
   }
   return "Unidentified";
 }

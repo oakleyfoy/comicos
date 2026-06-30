@@ -62,7 +62,8 @@ export function IntakeFullCoverCapturePage(): JSX.Element {
         <div className="rounded-2xl border border-emerald-500/50 bg-emerald-500/10 px-5 py-6">
           <p className="text-base font-semibold text-emerald-200">Sent.</p>
           <p className="mt-1 text-sm text-emerald-100/80">
-            Return to your review screen — the item re-identifies automatically.
+            Return to your review screen — it will re-run identification automatically. If it still
+            can&apos;t decide, use Import &amp; Accept or pick the issue.
           </p>
           <button
             type="button"

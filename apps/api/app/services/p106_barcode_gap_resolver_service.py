@@ -815,6 +815,8 @@ def barcode_gap_payload_from_diagnosis(diagnosis: dict[str, Any]) -> dict[str, A
         payload["comicvine_review_candidate"] = cv_review
     if diagnosis.get("import_path"):
         payload["import_path"] = diagnosis.get("import_path")
+    if diagnosis.get("full_cover_reprocess_completed"):
+        payload["full_cover_reprocess_completed"] = True
     return payload
 
 
@@ -862,6 +864,13 @@ def apply_barcode_gap_display_to_intake_item(item: Any, diagnosis: dict[str, Any
     series = _gcd_display_series(diagnosis)
     issue_number = _gcd_display_issue_number(diagnosis)
     publisher = _gcd_display_publisher(diagnosis)
+    rh = diagnosis.get("recovery_hints") if isinstance(diagnosis.get("recovery_hints"), dict) else {}
+    if not series:
+        series = str(rh.get("series") or rh.get("ocr_title") or "").strip() or None
+    if not issue_number:
+        issue_number = str(rh.get("issue_number") or rh.get("ocr_issue_number") or "").strip() or None
+    if not publisher:
+        publisher = str(rh.get("publisher") or rh.get("ocr_publisher") or "").strip() or None
     if primary:
         if not series:
             series = str(primary.get("series") or primary.get("title") or "").strip() or None

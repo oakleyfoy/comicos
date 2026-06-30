@@ -27,6 +27,9 @@ from app.services.recognition.catalog_matcher import load_catalog_issue_identity
 FINGERPRINT_REVIEW_SOURCE = "fingerprint"
 COMICVINE_REVIEW_SOURCE = "comicvine"
 STRICT_FINGERPRINT_CONFIDENCE = 0.92
+# After a full-cover follow-up, surface slightly weaker (but still real) matches for review
+# only. Auto-import gates stay at 0.82 / 0.92. Strip scans keep 0.82 for review rows too.
+FINGERPRINT_FULL_COVER_REVIEW_MIN = 0.72
 REVIEW_DECISION_TOP = "needs_review_top_candidates"
 
 
@@ -66,11 +69,33 @@ class CollapsedFingerprintGroup:
     member_count: int
 
 
+def _fingerprint_review_min_confidence(hints: IntakeGcdRecoveryHints) -> float:
+    from app.services.intake_fingerprint_image_region_service import REGION_FULL_COVER
+
+    if hints.fingerprint_region_safe and hints.fingerprint_image_region == REGION_FULL_COVER:
+        return FINGERPRINT_FULL_COVER_REVIEW_MIN
+    return 0.82
+
+
+def _candidates_for_fingerprint_review_display(
+    candidates: list[FingerprintRecoveryCandidate],
+    *,
+    hints: IntakeGcdRecoveryHints,
+) -> list[FingerprintRecoveryCandidate]:
+    floor = _fingerprint_review_min_confidence(hints)
+    return [c for c in candidates if float(c.confidence) >= floor]
+
+
 def collapse_fingerprint_candidates(
     session: Session,
     candidates: list[FingerprintRecoveryCandidate],
+    *,
+    hints: IntakeGcdRecoveryHints | None = None,
 ) -> list[CollapsedFingerprintGroup]:
-    qualified = _qualified_fingerprint_candidates(candidates)
+    if hints is not None:
+        qualified = _candidates_for_fingerprint_review_display(candidates, hints=hints)
+    else:
+        qualified = _qualified_fingerprint_candidates(candidates)
     counts: dict[tuple[Any, ...], int] = {}
     best_conf: dict[tuple[Any, ...], float] = {}
     best_id: dict[tuple[Any, ...], int] = {}
@@ -132,7 +157,7 @@ def build_fingerprint_review_bundle(
     *,
     limit: int = 3,
 ) -> dict[str, Any]:
-    groups = collapse_fingerprint_candidates(session, hints.fingerprint_candidates)
+    groups = collapse_fingerprint_candidates(session, hints.fingerprint_candidates, hints=hints)
     top_candidates: list[dict[str, Any]] = []
     for group in groups[:limit]:
         row = review_candidate_from_catalog_issue(
@@ -276,6 +301,14 @@ def attach_fingerprint_review_to_diagnosis(
             diagnosis["gcd_issue_number"] = primary.get("issue_number")
         if not diagnosis.get("gcd_publisher"):
             diagnosis["gcd_publisher"] = primary.get("publisher")
+    elif top and not diagnosis.get("gcd_series"):
+        rh_series = str(hints.series or hints.ocr_title or "").strip()
+        if rh_series:
+            diagnosis["gcd_series"] = rh_series
+        if not diagnosis.get("gcd_issue_number") and hints.issue_number:
+            diagnosis["gcd_issue_number"] = hints.issue_number
+        if not diagnosis.get("gcd_publisher") and hints.publisher:
+            diagnosis["gcd_publisher"] = hints.publisher
     return bundle
 
 

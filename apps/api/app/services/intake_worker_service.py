@@ -360,6 +360,11 @@ def _scanner_gap_finish_reason(diagnosis: dict[str, Any]) -> str:
     if diagnosis.get("ready_to_auto_import"):
         return "Not in your catalog yet — GCD match found (Import & Accept to add)."
     if diagnosis.get("status") in {"review_required", "conflict"}:
+        if diagnosis.get("full_cover_reprocess_completed"):
+            return (
+                "Full cover received — GCD barcode match still needs review. "
+                "Use Import & Accept or pick the issue."
+            )
         return "GCD barcode match needs review — pick the issue or use Import & Accept."
     if int(diagnosis.get("gcd_match_count") or 0) == 0:
         if int(diagnosis.get("gcd_sql_exact_barcode_column_count") or 0) > 0:
@@ -1107,6 +1112,8 @@ def process_intake_item(session: Session, *, item_id: int) -> str:
                     p105=p105,
                     recovery_hints=recovery_hints,
                 )
+                if using_full_cover_followup:
+                    gap_diag["full_cover_reprocess_completed"] = True
                 trace.apply_p106_1_from_diagnosis(gap_diag, gcd_path=gcd_path)
                 if gap_diag.get("recovery_stage") == P106_1_RECOVERY_STAGE:
                     trace.p106_called = True
