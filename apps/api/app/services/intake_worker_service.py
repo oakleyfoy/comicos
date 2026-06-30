@@ -650,6 +650,8 @@ def process_intake_item(session: Session, *, item_id: int) -> str:
 
     _p106_1_trace_cm = activate_intake_p106_1_trace(item_id)
     _p106_1_exec_trace = _p106_1_trace_cm.__enter__()
+    using_full_cover_followup = False
+    full_cover_storage_path_rel = ""
     try:
         abs_path = resolve_photo_import_storage_path(item.storage_path, image_id=item_id)
         if not abs_path.is_file():
@@ -658,10 +660,24 @@ def process_intake_item(session: Session, *, item_id: int) -> str:
 
         from app.services.intake_full_cover_followup_service import resolve_intake_recognition_image_path
 
+        # Capture the attached full-cover path BEFORE p105 overwrites barcode_read_json,
+        # so it survives reprocessing and the recognition image stays the full cover.
+        full_cover_storage_path_rel = _full_cover_storage_path_rel(item)
         recognition_path, using_full_cover_followup = resolve_intake_recognition_image_path(item, abs_path)
         recognition_bytes = image_bytes
         if recognition_path.resolve() != abs_path.resolve():
             recognition_bytes = recognition_path.read_bytes()
+
+        if using_full_cover_followup:
+            logger.info(
+                "FULL_COVER_REPROCESS_START %s",
+                json.dumps(
+                    {
+                        "item_id": int(item_id),
+                        "recognition_image_path": str(recognition_path),
+                    }
+                ),
+            )
 
         too_small, img_w, img_h, small_reason = recognition_image_too_small(recognition_bytes)
         logger.info(
@@ -690,7 +706,7 @@ def process_intake_item(session: Session, *, item_id: int) -> str:
             supplement_frame_bytes=supplement_frame_bytes,
             known_main_upc=known_main or None,
         )
-        item.barcode_read_json = p105.to_json()
+        item.barcode_read_json = _preserve_full_cover_path(p105.to_json(), full_cover_storage_path_rel)
 
         import io as io_mod
 
@@ -801,7 +817,9 @@ def process_intake_item(session: Session, *, item_id: int) -> str:
                     normalized = scan_validation.normalized or gpt_norm[:64]
                     _apply_recovered_barcode_to_item(item, normalized=normalized)
                     trace.normalized_barcode = normalized
-                    item.barcode_read_json = p105.to_json()
+                    item.barcode_read_json = _preserve_full_cover_path(
+                        p105.to_json(), full_cover_storage_path_rel
+                    )
                     logger.info(
                         "intake.item.barcode_gpt_recovered item_id=%s normalized=%s method=%s",
                         item_id,
@@ -1486,12 +1504,68 @@ def process_intake_item(session: Session, *, item_id: int) -> str:
         logger.exception("intake.item.failed item_id=%s", item_id)
         return _fail(session, item, f"Processing error: {exc}")
     finally:
+        if using_full_cover_followup:
+            _log_full_cover_reprocess_done(session, item_id=item_id)
         logger.info(
             "P106_1_EXECUTION_TRACE item_id=%s\n%s",
             item_id,
             format_execution_trace(_p106_1_exec_trace),
         )
         _p106_1_trace_cm.__exit__(None, None, None)
+
+
+def _full_cover_storage_path_rel(item: IntakeSessionItem) -> str:
+    raw = item.barcode_read_json
+    if not raw:
+        return ""
+    try:
+        parsed = json.loads(raw)
+    except json.JSONDecodeError:
+        return ""
+    if not isinstance(parsed, dict):
+        return ""
+    return str(parsed.get("full_cover_storage_path") or "").strip()
+
+
+def _preserve_full_cover_path(barcode_read_json: str, full_cover_storage_path_rel: str) -> str:
+    """Re-attach full_cover_storage_path after a barcode read overwrites barcode_read_json."""
+    if not full_cover_storage_path_rel:
+        return barcode_read_json
+    payload: dict[str, Any] = {}
+    if barcode_read_json:
+        try:
+            parsed = json.loads(barcode_read_json)
+            if isinstance(parsed, dict):
+                payload = parsed
+        except json.JSONDecodeError:
+            payload = {}
+    payload["full_cover_storage_path"] = full_cover_storage_path_rel
+    return json.dumps(payload)
+
+
+def _log_full_cover_reprocess_done(session: Session, *, item_id: int) -> None:
+    status_value = ""
+    candidates_count = 0
+    try:
+        refreshed = session.get(IntakeSessionItem, item_id)
+        status_value = str(getattr(refreshed, "status", "") or "")
+        candidates_count = len(
+            session.exec(
+                select(IntakeItemCandidate).where(IntakeItemCandidate.item_id == item_id)
+            ).all()
+        )
+    except Exception:  # noqa: BLE001
+        logger.debug("FULL_COVER_REPROCESS_DONE count failed item_id=%s", item_id, exc_info=True)
+    logger.info(
+        "FULL_COVER_REPROCESS_DONE %s",
+        json.dumps(
+            {
+                "item_id": int(item_id),
+                "status": status_value,
+                "candidates_count": int(candidates_count),
+            }
+        ),
+    )
 
 
 def _finish(session: Session, item: IntakeSessionItem, *, status: str, reason: str | None) -> str:

@@ -124,6 +124,29 @@ def _item_to_read(session: Session, item: IntakeSessionItem, *, token: str) -> I
         except json.JSONDecodeError:
             barcode_read = None
     log_intake_item_api_response(item, db_candidates=db_candidates, barcode_read=barcode_read)
+
+    gap = barcode_read.get("barcode_gap") if isinstance(barcode_read, dict) else None
+    gap_tops = gap.get("needs_review_top_candidates") if isinstance(gap, dict) else None
+    barcode_gap_candidates_count = len(gap_tops) if isinstance(gap_tops, list) else 0
+    full_cover_image_path = (
+        str(barcode_read.get("full_cover_storage_path") or "")
+        if isinstance(barcode_read, dict)
+        else ""
+    )
+    logger.info(
+        "REVIEW_PAYLOAD_SOURCE %s",
+        json.dumps(
+            {
+                "item_id": int(item.id or 0),
+                "status": item.status,
+                "barcode_gap_candidates_count": barcode_gap_candidates_count,
+                "db_intake_item_candidate_count": len(db_candidates),
+                "rendered_candidates_count": len(candidates),
+                "using_full_cover_path": bool(full_cover_image_path),
+                "full_cover_image_path": full_cover_image_path,
+            }
+        ),
+    )
     return IntakeItemRead(
         id=int(item.id or 0),
         session_id=int(item.session_id),

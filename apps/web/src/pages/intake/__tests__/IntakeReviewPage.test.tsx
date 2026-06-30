@@ -187,6 +187,55 @@ describe("IntakeReviewPage", () => {
     expect(screen.getByTestId("full-cover-upload-input")).toHaveAttribute("accept", "image/*");
   });
 
+  it("renders a frontend build marker for deployment verification", async () => {
+    vi.spyOn(intake, "getIntakeReview").mockResolvedValue(baseReview);
+    renderReview();
+    const marker = await screen.findByTestId("frontend-build-marker");
+    expect(marker).toHaveTextContent(/build /);
+  });
+
+  it("hides fingerprint candidates and Import & Accept in needs_full_cover_photo state", async () => {
+    vi.spyOn(intake, "getIntakeReview").mockResolvedValue({
+      ...baseReview,
+      counts: { ...baseReview.counts, needs_full_cover_photo: 1 },
+      items: [
+        {
+          ...baseReview.items[0],
+          id: 42,
+          status: "needs_full_cover_photo",
+          selected_catalog_issue_id: null,
+          barcode_read: {
+            needs_full_cover_photo: true,
+            barcode_gap: {
+              needs_review_top_candidates: [
+                { series: "Silver Surfer", issue_number: "84", publisher: "Marvel", confidence: 0.7 },
+              ],
+            },
+          },
+          candidates: [
+            {
+              id: 1,
+              catalog_issue_id: 1000,
+              variant_id: null,
+              publisher: "Marvel",
+              series: "Silver Surfer",
+              issue_number: "84",
+              cover_url: null,
+              score: 70,
+              source: "fingerprint",
+              rank: 0,
+            },
+          ],
+        },
+      ],
+    });
+    renderReview();
+    expect(await screen.findByTestId("full-cover-camera-42")).toBeInTheDocument();
+    expect(screen.queryByText(/Silver Surfer/)).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Import & Accept/ })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Rescan" })).toBeInTheDocument();
+  });
+
   it("uploads captured full-cover photo via API", async () => {
     const uploadSpy = vi.spyOn(intake, "uploadIntakeFullCoverPhoto").mockResolvedValue({
       ...baseReview.items[0],

@@ -893,7 +893,7 @@ async def attach_full_cover_photo_to_intake_item(
     raw = await upload.read()
     if len(raw) > MAX_FILE_BYTES:
         raise HTTPException(status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE, detail="Image too large")
-    too_small, _, _, small_reason = recognition_image_too_small(raw)
+    too_small, img_w, img_h, small_reason = recognition_image_too_small(raw)
     if too_small:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=small_reason or "Image too small")
 
@@ -905,6 +905,19 @@ async def attach_full_cover_photo_to_intake_item(
     dest.parent.mkdir(parents=True, exist_ok=True)
     dest.write_bytes(raw)
     rel = relative_path_under_repo_root(dest)
+
+    logger.info(
+        "FULL_COVER_UPLOAD_RECEIVED %s",
+        json.dumps(
+            {
+                "item_id": int(item.id or 0),
+                "bytes": len(raw),
+                "width": int(img_w),
+                "height": int(img_h),
+                "path": rel,
+            }
+        ),
+    )
 
     payload: dict = {}
     if item.barcode_read_json:
@@ -918,17 +931,42 @@ async def attach_full_cover_photo_to_intake_item(
     payload["full_cover_required"] = False
     payload.pop("needs_full_cover_photo", None)
 
+    # The barcode-strip scan may have persisted fingerprint candidates (e.g. Silver
+    # Surfer #84) that are unrelated to the real cover. Clear every persisted candidate
+    # so the full-cover reprocess starts clean and the review payload cannot render
+    # stale rows from the previous scan.
+    cleared = _clear_all_intake_item_candidates(session, item_id=int(item.id or 0))
+
     item.barcode_read_json = json.dumps(payload)
     item.status = ITEM_QUEUED
     item.reason = None
     item.error = None
     item.confidence = 0.0
+    item.selected_catalog_issue_id = None
+    item.selected_variant_id = None
     session.add(item)
     session.commit()
     session.refresh(item)
     run_intake_item_async(int(item.id or 0))
-    logger.info("intake.full_cover.attached item_id=%s path=%s", item.id, rel)
+    logger.info(
+        "intake.full_cover.attached item_id=%s path=%s cleared_candidates=%s",
+        item.id,
+        rel,
+        cleared,
+    )
     return item
+
+
+def _clear_all_intake_item_candidates(session: Session, *, item_id: int) -> int:
+    """Delete every persisted IntakeItemCandidate for an item. Returns rows removed."""
+    rows = list(
+        session.exec(
+            select(IntakeItemCandidate).where(IntakeItemCandidate.item_id == item_id)
+        ).all()
+    )
+    for row in rows:
+        session.delete(row)
+    return len(rows)
 
 
 def _ensure_session_acquisition(session: Session, intake: IntakeSession) -> Acquisition:

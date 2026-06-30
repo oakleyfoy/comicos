@@ -88,6 +88,12 @@ function intakeNeedsFullCoverPhoto(item: IntakeItem): boolean {
   return item.barcode_read?.needs_full_cover_photo === true;
 }
 
+const FRONTEND_BUILD_SHA =
+  typeof __BUILD_SHA__ === "string" ? __BUILD_SHA__ : "unknown";
+const FRONTEND_BUILD_TIME =
+  typeof __BUILD_TIME__ === "string" ? __BUILD_TIME__ : "unknown";
+const FRONTEND_BUILD_SHA_SHORT = FRONTEND_BUILD_SHA.slice(0, 8);
+
 const FULL_COVER_PROMPT =
   "Barcode was read, but no barcode record exists in GCD or your catalog. Take a full front-cover photo to identify by cover art.";
 
@@ -313,6 +319,13 @@ export function IntakeReviewPage(): JSX.Element {
       setError(err instanceof Error ? err.message : "Could not load review");
     }
   }, [token]);
+
+  useEffect(() => {
+    // Deployment marker so we can confirm in the field which frontend build is live.
+    console.info(
+      `[ComicOS] intake-review build sha=${FRONTEND_BUILD_SHA} built=${FRONTEND_BUILD_TIME}`,
+    );
+  }, []);
 
   useEffect(() => {
     void load();
@@ -672,6 +685,13 @@ export function IntakeReviewPage(): JSX.Element {
           void runAction(id, () => uploadIntakeFullCoverPhoto(id, file));
         }}
       />
+
+      <footer
+        className="mx-auto mt-8 max-w-3xl text-center text-[10px] text-slate-600"
+        data-testid="frontend-build-marker"
+      >
+        build {FRONTEND_BUILD_SHA_SHORT} · {FRONTEND_BUILD_TIME}
+      </footer>
 
       {pickerItem ? (
         <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/70 p-4">

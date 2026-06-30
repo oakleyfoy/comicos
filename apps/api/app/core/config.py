@@ -29,6 +29,14 @@ class Settings(BaseSettings):
     app_env: str = Field(default="development", alias="APP_ENV")
     database_url: str = "postgresql+pg8000://postgres:postgres@localhost:5433/comic_os"
     debug_runtime: bool = False
+    build_sha: str = Field(default="", alias="BUILD_SHA")
+    build_time: str = Field(default="", alias="BUILD_TIME")
+    runtime_kind: str = Field(default="", alias="RUNTIME_KIND")
+    full_cover_followup_enabled: bool = Field(default=True, alias="FULL_COVER_FOLLOWUP_ENABLED")
+    mobile_capture_enabled: bool = Field(default=True, alias="MOBILE_CAPTURE_ENABLED")
+    suppress_unsafe_fingerprint_enabled: bool = Field(
+        default=True, alias="SUPPRESS_UNSAFE_FINGERPRINT_ENABLED"
+    )
     ops_admin_emails_raw: str = Field(default="", alias="OPS_ADMIN_EMAILS")
     secret_key: str = "change-me-in-development"
     access_token_expire_minutes: int = 60

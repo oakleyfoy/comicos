@@ -92,7 +92,7 @@ from app.schemas.cover_link_decisions import (
     CoverImageLinkDecisionRead,
 )
 from app.schemas.cover_relationship_graph import CoverRelationshipGraphRead
-from app.schemas.debug import RuntimeDebugResponse
+from app.schemas.debug import BuildInfoResponse, RuntimeDebugResponse
 from app.schemas.duplicate_candidate_review import (
     DuplicateCandidateNotesUpdate,
     DuplicateCandidateReviewCreate,
@@ -1118,6 +1118,7 @@ from app.services.relationship_replays import (
     start_relationship_replay_run_for_ops,
     start_relationship_replay_run_for_owner,
 )
+from app.services.build_info_service import build_build_info
 from app.services.runtime_debug import build_runtime_debug_response
 from app.services.variant_family_intelligence import (
     list_variant_family_clusters_for_ops,
@@ -1790,6 +1791,12 @@ def debug_runtime(settings: Settings = Depends(get_settings)) -> RuntimeDebugRes
         raise HTTPException(status_code=404, detail="Not Found")
 
     return build_runtime_debug_response(settings)
+
+
+@app.get("/api/ops/build-info", response_model=BuildInfoResponse)
+def ops_build_info(settings: Settings = Depends(get_settings)) -> BuildInfoResponse:
+    """Public deployment marker so the frontend/console can confirm the live backend build."""
+    return BuildInfoResponse(**build_build_info(settings))
 
 
 @app.post("/auth/register", response_model=UserRead, status_code=status.HTTP_201_CREATED)
