@@ -178,6 +178,39 @@ def _add_candidate(session: Session, *, item_id: int, source: str, rank: int, da
     )
 
 
+def _clear_fingerprint_artifacts(
+    session: Session,
+    *,
+    item_id: int,
+    gap_diag: dict[str, Any] | None,
+) -> int:
+    """Discard fingerprint review artifacts once a barcode source resolves the issue.
+
+    Deletes persisted ``IntakeItemCandidate(source="fingerprint")`` rows and strips
+    fingerprint review keys from the gap diagnosis so they cannot survive (or be
+    re-persisted) alongside a successful barcode match. Returns the number of
+    fingerprint candidate rows deleted.
+    """
+    deleted = 0
+    rows = session.exec(
+        select(IntakeItemCandidate).where(IntakeItemCandidate.item_id == item_id)
+    ).all()
+    for row in rows:
+        if str(getattr(row, "source", "") or "") == "fingerprint":
+            session.delete(row)
+            deleted += 1
+    if isinstance(gap_diag, dict):
+        for key in (
+            "needs_review_top_candidates",
+            "fingerprint_review",
+            "review_decision",
+            "review_candidates",
+            "fingerprint_candidates",
+        ):
+            gap_diag.pop(key, None)
+    return deleted
+
+
 def _catalog_issue_year(session: Session, catalog_issue_id: int) -> str:
     issue = session.get(CatalogIssue, catalog_issue_id)
     if issue is not None and issue.cover_date is not None:
@@ -494,33 +527,6 @@ def _should_run_p106_1_non_barcode_recovery(
     if gap_diag is not None and int(gap_diag.get("gcd_match_count") or 0) > 0:
         return False
     if gap_diag is not None and gap_diag.get("p106_1_skipped"):
-        return False
-    return True
-
-
-def _should_call_comicvine_after_p106_pipeline(
-    *,
-    gap_diag: dict[str, Any] | None,
-    gcd_path: Path,
-    normalized: str,
-    candidate: dict[str, Any] | None,
-    p106_1_attempted: bool,
-) -> bool:
-    if candidate is not None:
-        return False
-    if not _p106_reports_no_gcd_match(gap_diag):
-        return False
-    if _gcd_has_exact_barcode_authority(gcd_path, normalized) or p106_gap_is_exact_barcode_authority(
-        gap_diag or {}
-    ):
-        return False
-    if gap_diag and gap_diag.get("ready_to_auto_import"):
-        return False
-    if _should_run_p106_1_non_barcode_recovery(
-        normalized=normalized,
-        gap_diag=gap_diag,
-        candidate=candidate,
-    ) and not p106_1_attempted:
         return False
     return True
 
@@ -966,8 +972,55 @@ def process_intake_item(session: Session, *, item_id: int) -> str:
                         exc_info=True,
                     )
 
+            # --- ComicVine barcode lookup is a BARCODE source. It MUST run before any
+            # fingerprint recovery so that a barcode match always wins and visual
+            # fingerprint matching is never shown alongside a resolved barcode. ---
+            comicvine_attempted = False
+            if (
+                candidate is None
+                and _p106_reports_no_gcd_match(gap_diag)
+                and not p106_exact_barcode_authority
+                and not p106_gap_is_exact_barcode_authority(gap_diag or {})
+                and not _gcd_has_exact_barcode_authority(gcd_path, normalized)
+                and not (gap_diag and gap_diag.get("ready_to_auto_import"))
+            ):
+                comicvine_attempted = True
+                trace.comicvine_fallback_called = True
+                candidate = _resolve_comicvine_candidate(session, barcode=normalized)
+                if candidate is not None:
+                    logger.info(
+                        "intake.comicvine_barcode_resolved item_id=%s barcode=%s",
+                        item_id,
+                        normalized,
+                    )
+
+            # --- If ANY barcode source (local / learned / GCD / ComicVine) resolved the
+            # issue, discard fingerprint review artifacts and skip P106 fingerprint
+            # recovery entirely before continuing the normal barcode import flow. ---
+            if candidate is not None:
+                cleared_fp = _clear_fingerprint_artifacts(
+                    session, item_id=int(item.id or 0), gap_diag=gap_diag
+                )
+                if gap_diag:
+                    try:
+                        _apply_p106_diagnosis_to_intake_item(item, gap_diag=gap_diag)
+                    except Exception:
+                        logger.warning(
+                            "intake.barcode_source_won.display_failed item_id=%s",
+                            item_id,
+                            exc_info=True,
+                        )
+                logger.info(
+                    "intake.barcode_source_won item_id=%s source=%s comicvine_attempted=%s "
+                    "cleared_fingerprint_rows=%s",
+                    item_id,
+                    candidate.get("source"),
+                    comicvine_attempted,
+                    cleared_fp,
+                )
+
             p106_1_attempted = False
-            if _should_run_p106_1_non_barcode_recovery(
+            if candidate is None and _should_run_p106_1_non_barcode_recovery(
                 normalized=normalized,
                 gap_diag=gap_diag,
                 candidate=candidate,
@@ -1079,61 +1132,50 @@ def process_intake_item(session: Session, *, item_id: int) -> str:
                         normalized,
                         exc_info=True,
                     )
+                # P106.1 GCD non-barcode recovery (OCR/metadata) just auto-resolved a
+                # catalog/GCD issue: that barcode-equivalent match wins, so any
+                # fingerprint review candidates produced during P106.1 are discarded.
+                if candidate is not None:
+                    cleared_fp = _clear_fingerprint_artifacts(
+                        session, item_id=int(item.id or 0), gap_diag=gap_diag
+                    )
+                    if gap_diag:
+                        try:
+                            _apply_p106_diagnosis_to_intake_item(item, gap_diag=gap_diag)
+                        except Exception:
+                            logger.warning(
+                                "intake.barcode_source_won.display_failed item_id=%s",
+                                item_id,
+                                exc_info=True,
+                            )
+                    logger.info(
+                        "intake.barcode_source_won item_id=%s source=%s stage=p106_1_auto_resolve "
+                        "cleared_fingerprint_rows=%s",
+                        item_id,
+                        candidate.get("source"),
+                        cleared_fp,
+                    )
 
             if candidate is None and _p106_reports_no_gcd_match(gap_diag):
                 if _gcd_has_exact_barcode_authority(gcd_path, normalized) or p106_gap_is_exact_barcode_authority(
                     gap_diag or {}
                 ):
+                    # GCD barcode authority wins: clear any fingerprint review artifacts.
+                    _clear_fingerprint_artifacts(session, item_id=int(item.id or 0), gap_diag=gap_diag)
                     if gap_diag:
                         sync_intake_display_from_p106_gap(item, gap_diag)
+                        try:
+                            _apply_p106_diagnosis_to_intake_item(item, gap_diag=gap_diag)
+                        except Exception:
+                            logger.warning(
+                                "intake.barcode_authority.display_failed item_id=%s",
+                                item_id,
+                                exc_info=True,
+                            )
                     gap_reason = _scanner_gap_finish_reason(gap_diag or {})
                     session.add(item)
                     session.flush()
                     return _finish(session, item, status=ITEM_NEEDS_REVIEW, reason=gap_reason)
-
-            if _should_call_comicvine_after_p106_pipeline(
-                gap_diag=gap_diag,
-                gcd_path=gcd_path,
-                normalized=normalized,
-                candidate=candidate,
-                p106_1_attempted=p106_1_attempted,
-            ):
-                trace.comicvine_fallback_called = True
-                cv_candidate = _resolve_comicvine_candidate(session, barcode=normalized)
-                if p106_gap_is_exact_barcode_authority(gap_diag):
-                    cv_candidate = None
-                if gap_diag and cv_candidate is not None:
-                    from app.services.p106_1_gcd_non_barcode_recovery_service import IntakeGcdRecoveryHints
-                    from app.services.p106_fingerprint_review_fallback_service import (
-                        enhance_diagnosis_with_comicvine_fingerprint_consensus,
-                    )
-
-                    rh = gap_diag.get("recovery_hints") if isinstance(gap_diag.get("recovery_hints"), dict) else {}
-                    hints_for_cv = IntakeGcdRecoveryHints(
-                        publisher=rh.get("publisher") or item.matched_publisher,
-                        series=rh.get("series") or item.matched_series,
-                        issue_number=rh.get("issue_number") or item.matched_issue_number,
-                        year=rh.get("year"),
-                        ocr_title=rh.get("ocr_title"),
-                        ocr_issue_number=rh.get("ocr_issue_number"),
-                        ocr_publisher=rh.get("ocr_publisher"),
-                        fingerprint_confidence=rh.get("fingerprint_confidence"),
-                    )
-                    enhance_diagnosis_with_comicvine_fingerprint_consensus(
-                        gap_diag,
-                        hints=hints_for_cv,
-                        barcode=normalized,
-                        comicvine_candidate=cv_candidate,
-                    )
-                    try:
-                        _apply_p106_diagnosis_to_intake_item(item, gap_diag=gap_diag)
-                    except Exception:
-                        logger.warning(
-                            "intake.comicvine_fingerprint.display_failed item_id=%s",
-                            item_id,
-                            exc_info=True,
-                        )
-                candidate = cv_candidate
 
             if candidate is None:
                 if gap_diag:

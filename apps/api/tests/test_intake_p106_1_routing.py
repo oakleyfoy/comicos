@@ -108,7 +108,8 @@ def _worker_mocks(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, *, barcode: s
     )
 
 
-def test_p106_no_gcd_runs_p106_1_before_comicvine(tmp_path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_comicvine_runs_before_p106_1_fingerprint(tmp_path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """ComicVine is a barcode source and must be consulted before P106.1 fingerprint recovery."""
     _patch_gcd(monkeypatch, _empty_marvel_gcd_db(tmp_path))
     monkeypatch.setattr(worker, "AUTO_RESOLVE_UNIQUE_GCD_BARCODE_GAP", False)
     _worker_mocks(tmp_path, monkeypatch, barcode=MARVEL_BC)
@@ -155,12 +156,18 @@ def test_p106_no_gcd_runs_p106_1_before_comicvine(tmp_path, monkeypatch: pytest.
 
     assert "p106_1" in call_order
     assert "comicvine" in call_order
-    assert call_order.index("p106_1") < call_order.index("comicvine")
+    # ComicVine (barcode source) must be tried before fingerprint recovery.
+    assert call_order.index("comicvine") < call_order.index("p106_1")
     gap = __import__("json").loads(item.barcode_read_json or "{}").get("barcode_gap") or {}
     assert gap.get("recovery_stage") == P106_1_RECOVERY_STAGE
 
 
-def test_comicvine_skipped_when_p106_1_auto_imports(tmp_path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_comicvine_consulted_before_p106_1_auto_import(tmp_path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """When ComicVine misses, P106.1 GCD metadata recovery may still auto-import.
+
+    ComicVine is a barcode source and is consulted before P106.1; a ComicVine miss
+    (None) lets P106.1 GCD non-barcode recovery resolve the issue.
+    """
     _patch_gcd(monkeypatch, _empty_marvel_gcd_db(tmp_path))
     monkeypatch.setattr(worker, "AUTO_RESOLVE_UNIQUE_GCD_BARCODE_GAP", True)
     _worker_mocks(tmp_path, monkeypatch, barcode=MARVEL_BC)
@@ -213,7 +220,8 @@ def test_comicvine_skipped_when_p106_1_auto_imports(tmp_path, monkeypatch: pytes
         session.commit()
         worker.process_intake_item(session, item_id=int(item.id))
 
-    assert comicvine_called["v"] is False
+    # ComicVine (barcode) is now consulted before P106.1 fingerprint recovery.
+    assert comicvine_called["v"] is True
 
 
 def test_field_test_event_includes_p106_1_fields(tmp_path, monkeypatch: pytest.MonkeyPatch) -> None:

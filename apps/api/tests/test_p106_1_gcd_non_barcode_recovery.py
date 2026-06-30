@@ -711,7 +711,7 @@ def test_fingerprint_pts_only_for_matching_candidate(session: Session, tmp_path:
     assert other_breakdown["fingerprint_pts"] == 0.0
 
 
-@patch("app.services.p106_1_gcd_non_barcode_recovery_service.search_catalog_fingerprint_hits_for_crop_path")
+@patch("app.services.photo_import_fingerprint_service.search_catalog_fingerprint_hits_for_crop_path")
 def test_gather_hints_persists_single_fingerprint_fields(
     mock_search: MagicMock,
     session: Session,
