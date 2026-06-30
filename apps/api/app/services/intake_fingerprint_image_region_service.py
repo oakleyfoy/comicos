@@ -18,10 +18,12 @@ REGION_BARCODE_STRIP = "barcode_strip"
 REGION_UPC_DOMINATED = "upc_region"
 REGION_FULL_COVER = "full_cover"
 REGION_UNKNOWN = "unknown"
+REGION_UNSAFE_PARTIAL_COVER = "unsafe_partial_cover_barcode_frame"
 
 SUPPRESSED_BARCODE_REGION = "barcode_region_crop"
 SUPPRESSED_UPC_DOMINATED = "upc_dominated_crop"
 SUPPRESSED_BARCODE_DOMINATED_FRAME = "barcode_dominated_frame"
+SUPPRESSED_UNSAFE_PARTIAL_COVER = "unsafe_partial_cover_barcode_frame"
 
 
 @dataclass(frozen=True)
@@ -67,6 +69,81 @@ def _box_area(box: tuple[int, int, int, int]) -> int:
 def _overlap_percent(box: tuple[int, int, int, int], *, width: int, height: int) -> float:
     total = max(1, width * height)
     return round(_box_area(box) / total * 100.0, 2)
+
+
+def _full_front_cover_body_likely(
+    *,
+    width: int,
+    height: int,
+    geometry: BarcodeRegionGeometry,
+    fe_overlap: float,
+    mb_overlap: float,
+) -> bool:
+    """Portrait phone photo with UPC band anchored in the lower cover (safe for fingerprint)."""
+    if width <= 0 or height <= 0:
+        return False
+    ratio = width / height
+    fe_top_ratio = geometry.full_expanded[1] / height
+    if height >= 600 and ratio >= 0.55 and fe_top_ratio >= 0.45 and mb_overlap < 25.0:
+        return True
+    if height >= 400 and 0.45 <= ratio <= 1.65 and fe_overlap < 55.0 and mb_overlap < 22.0:
+        return True
+    return False
+
+
+def _partial_cover_left_barcode_frame(
+    *,
+    width: int,
+    height: int,
+    geometry: BarcodeRegionGeometry,
+    fe_overlap: float,
+    mb_overlap: float,
+) -> bool:
+    """Tall phone capture dominated by a left-edge vertical barcode column, not a full front cover."""
+    if width <= 0 or height <= 0:
+        return False
+    if is_likely_barcode_strip(width, height):
+        return False
+    if height <= width * 1.05:
+        return False
+    if _full_front_cover_body_likely(
+        width=width,
+        height=height,
+        geometry=geometry,
+        fe_overlap=fe_overlap,
+        mb_overlap=mb_overlap,
+    ):
+        return False
+
+    mb = geometry.main_bars
+    mb_w = max(0, mb[2] - mb[0])
+    mb_h = max(0, mb[3] - mb[1])
+    mb_left = mb[0]
+    mb_w_ratio = mb_w / width
+    mb_h_ratio = mb_h / height
+    left_vertical_strip = (
+        mb_left <= max(12, int(width * 0.12))
+        and mb_h_ratio >= 0.38
+        and mb_w_ratio <= 0.42
+    )
+
+    fe_top = geometry.full_expanded[1]
+    bottom_upc_band = fe_top >= int(height * 0.42) and mb_overlap < 28.0 and fe_overlap <= 55.0
+
+    if left_vertical_strip and not bottom_upc_band:
+        return True
+
+    ls = geometry.left_supplement
+    ls_w = max(0, ls[2] - ls[0])
+    if (
+        ls[0] <= int(width * 0.08)
+        and ls_w >= int(width * 0.18)
+        and mb_h_ratio >= 0.32
+        and fe_top < int(height * 0.38)
+    ):
+        return True
+
+    return False
 
 
 def assess_fingerprint_image_region(
@@ -147,6 +224,25 @@ def assess_fingerprint_image_region(
             fingerprint_image_region=REGION_UPC_DOMINATED,
             fingerprint_region_safe=False,
             fingerprint_suppressed_reason=SUPPRESSED_UPC_DOMINATED,
+            width=w,
+            height=h,
+            barcode_crop_width=crop_w,
+            barcode_crop_height=crop_h,
+            barcode_region_overlap_percent=fe_overlap,
+            main_bars_overlap_percent=mb_overlap,
+            p105_barcode_strip_layout=strip_layout,
+        )
+    if geometry is not None and _partial_cover_left_barcode_frame(
+        width=w,
+        height=h,
+        geometry=geometry,
+        fe_overlap=fe_overlap,
+        mb_overlap=mb_overlap,
+    ):
+        return FingerprintRegionAssessment(
+            fingerprint_image_region=REGION_UNSAFE_PARTIAL_COVER,
+            fingerprint_region_safe=False,
+            fingerprint_suppressed_reason=SUPPRESSED_UNSAFE_PARTIAL_COVER,
             width=w,
             height=h,
             barcode_crop_width=crop_w,

@@ -1060,6 +1060,7 @@ def process_intake_item(session: Session, *, item_id: int) -> str:
                     from app.services.intake_full_cover_followup_service import (
                         FULL_COVER_USER_MESSAGE,
                         apply_full_cover_followup_to_diagnosis,
+                        gcd_barcode_lookup_missed,
                         intake_has_full_cover_followup_image,
                         should_require_full_cover_followup,
                     )
@@ -1070,8 +1071,13 @@ def process_intake_item(session: Session, *, item_id: int) -> str:
                     from app.services.p106_fingerprint_review_fallback_service import (
                         persist_review_candidates_on_intake_item,
                     )
+                    from app.services.p106_barcode_gap_resolver_service import barcode_gap_payload_from_diagnosis
 
-                    if not recognition_region.fingerprint_region_safe:
+                    unsafe_fingerprint_region = (
+                        not recognition_region.fingerprint_region_safe
+                        or not primary_region.fingerprint_region_safe
+                    )
+                    if unsafe_fingerprint_region:
                         gap_diag.pop("needs_review_top_candidates", None)
                         gap_diag.pop("fingerprint_review", None)
                         gap_diag.pop("review_decision", None)
@@ -1079,6 +1085,12 @@ def process_intake_item(session: Session, *, item_id: int) -> str:
 
                     tops = gap_diag.get("needs_review_top_candidates")
                     review_count = len(tops) if isinstance(tops, list) else 0
+                    barcode_path_miss = (
+                        gcd_barcode_lookup_missed(gap_diag)
+                        and bool(normalized)
+                        and not local_catalog_hit
+                        and not p106_exact_barcode_authority
+                    )
                     full_cover_required = should_require_full_cover_followup(
                         gap_diag=gap_diag,
                         primary_region=primary_region,
@@ -1088,15 +1100,23 @@ def process_intake_item(session: Session, *, item_id: int) -> str:
                         p106_exact_barcode_authority=p106_exact_barcode_authority,
                         barcode_decoded=bool(normalized),
                     )
+                    if barcode_path_miss and (full_cover_required or unsafe_fingerprint_region):
+                        full_cover_required = True
+
                     debug_payload: dict[str, Any] = {
                         "intake_item_id": item_id,
                         "barcode": normalized,
+                        "item_status_intended": ITEM_NEEDS_FULL_COVER_PHOTO
+                        if full_cover_required
+                        else ITEM_NEEDS_REVIEW,
                         "recognition_image_path": str(recognition_path),
                         "fingerprint_image_path": str(recognition_path),
                         "primary_image_path": str(abs_path),
                         "full_cover_followup_required": full_cover_required,
+                        "needs_full_cover_photo": full_cover_required,
                         "p106_1_called": p106_1_attempted,
                         "p106_1_review_candidates_count": review_count,
+                        "barcode_gap": barcode_gap_payload_from_diagnosis(gap_diag),
                     }
                     merge_fingerprint_region_instrumentation(debug_payload, recognition_region)
                     debug_payload["primary_fingerprint_image_region"] = primary_region.fingerprint_image_region
@@ -1121,7 +1141,7 @@ def process_intake_item(session: Session, *, item_id: int) -> str:
                             exc_info=True,
                         )
 
-                    if full_cover_required:
+                    if full_cover_required and barcode_path_miss:
                         apply_full_cover_followup_to_diagnosis(
                             gap_diag,
                             primary_region,

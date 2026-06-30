@@ -334,7 +334,11 @@ def persist_review_candidates_on_intake_item(
         clear_candidates_fn(session, item_id)
         return
     region = str(diagnosis.get("fingerprint_image_region") or "")
-    if region in {"barcode_strip", "upc_region"}:
+    if region in {
+        "barcode_strip",
+        "upc_region",
+        "unsafe_partial_cover_barcode_frame",
+    }:
         clear_candidates_fn(session, item_id)
         return
     tops = diagnosis.get("needs_review_top_candidates")

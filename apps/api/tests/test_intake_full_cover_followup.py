@@ -26,7 +26,18 @@ from app.services.gcd_barcode_import_service import gcd_engine_from
 from app.services.intake_fingerprint_image_region_service import (
     REGION_BARCODE_STRIP,
     REGION_FULL_COVER,
+    REGION_UNSAFE_PARTIAL_COVER,
     assess_fingerprint_image_region,
+)
+from app.services.p105_comic_barcode_regions import BarcodeRegionGeometry
+from app.services.p106_fingerprint_review_fallback_service import (
+    attach_fingerprint_review_to_diagnosis,
+    persist_review_candidates_on_intake_item,
+)
+from app.services.p106_1_gcd_non_barcode_recovery_service import (
+    FingerprintRecoveryCandidate,
+    IntakeGcdRecoveryHints,
+    gather_intake_gcd_recovery_hints,
 )
 from app.services.intake_full_cover_followup_service import (
     FULL_COVER_USER_MESSAGE,
@@ -35,15 +46,38 @@ from app.services.intake_full_cover_followup_service import (
 )
 from app.services.intake_barcode_confidence import CoverFingerprintOutcome
 from app.services.p105_comic_barcode_read_service import ComicBarcodeReadResult
-from app.services.p106_fingerprint_review_fallback_service import attach_fingerprint_review_to_diagnosis
-from app.services.p106_1_gcd_non_barcode_recovery_service import (
-    FingerprintRecoveryCandidate,
-    IntakeGcdRecoveryHints,
-    gather_intake_gcd_recovery_hints,
-)
 import app.services.intake_worker_service as worker
 
 MARVEL_BC = "75960620629200111"
+
+
+def _tall_left_edge_geometry(*, width: int = 1080, height: int = 1920) -> BarcodeRegionGeometry:
+    """Production-shaped tall phone capture: vertical barcode column on the left."""
+    fe = (0, 0, width, int(height * 0.55))
+    mb = (0, int(height * 0.12), int(width * 0.28), int(height * 0.88))
+    ls = (0, int(height * 0.12), int(width * 0.30), int(height * 0.88))
+    rc = (int(width * 0.78), int(height * 0.12), width, int(height * 0.88))
+    return BarcodeRegionGeometry(
+        full_expanded=fe,
+        main_bars=mb,
+        left_supplement=ls,
+        right_cover_digit=rc,
+        original_size=(width, height),
+    )
+
+
+def _full_cover_phone_geometry(*, width: int = 800, height: int = 1200) -> BarcodeRegionGeometry:
+    fe = (0, int(height * 0.52), width, height)
+    mb = (int(width * 0.16), int(height * 0.55), int(width * 0.74), height)
+    ls = (0, int(height * 0.58), int(width * 0.30), int(height * 0.82))
+    rc = (int(width * 0.74), int(height * 0.58), width, int(height * 0.82))
+    return BarcodeRegionGeometry(
+        full_expanded=fe,
+        main_bars=mb,
+        left_supplement=ls,
+        right_cover_digit=rc,
+        original_size=(width, height),
+    )
 
 
 def _engine():
@@ -135,9 +169,103 @@ def test_barcode_strip_region_detected() -> None:
 
 
 def test_full_cover_region_safe() -> None:
-    region = assess_fingerprint_image_region(None, image_bytes=_jpeg_bytes(800, 1200))
+    region = assess_fingerprint_image_region(
+        None,
+        image_bytes=_jpeg_bytes(800, 1200),
+        geometry=_full_cover_phone_geometry(width=800, height=1200),
+    )
     assert region.fingerprint_region_safe is True
     assert region.fingerprint_image_region in {REGION_FULL_COVER, "unknown"}
+
+
+def test_tall_partial_cover_left_barcode_frame_unsafe() -> None:
+    region = assess_fingerprint_image_region(
+        None,
+        image_bytes=_jpeg_bytes(1080, 1920),
+        geometry=_tall_left_edge_geometry(width=1080, height=1920),
+    )
+    assert region.fingerprint_image_region == REGION_UNSAFE_PARTIAL_COVER
+    assert region.fingerprint_region_safe is False
+    assert region.fingerprint_suppressed_reason == "unsafe_partial_cover_barcode_frame"
+
+
+def test_unsafe_region_never_persists_fingerprint_candidates() -> None:
+    cleared: list[int] = []
+
+    def _clear(_session, item_id: int) -> None:
+        cleared.append(item_id)
+
+    def _add(*args, **kwargs) -> None:
+        raise AssertionError("must not add fingerprint candidates")
+
+    diagnosis = {
+        "fingerprint_region_safe": False,
+        "fingerprint_image_region": REGION_UNSAFE_PARTIAL_COVER,
+        "needs_review_top_candidates": [{"catalog_issue_id": 1, "confidence": 0.9}],
+    }
+    persist_review_candidates_on_intake_item(
+        MagicMock(),
+        item_id=99,
+        diagnosis=diagnosis,
+        add_candidate_fn=_add,
+        clear_candidates_fn=_clear,
+    )
+    assert cleared == [99]
+    assert "needs_review_top_candidates" in diagnosis
+
+
+def test_tall_partial_cover_worker_requires_full_cover(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import json
+
+    from app.services.intake_p106_1_intake_debug_service import p106_1_intake_debug_dir
+
+    _patch_gcd(monkeypatch, _empty_marvel_gcd_db(tmp_path))
+    monkeypatch.setattr(worker, "AUTO_RESOLVE_UNIQUE_GCD_BARCODE_GAP", False)
+    monkeypatch.setattr(worker, "lookup_comicvine_by_barcode", lambda *a, **k: None)
+    img = _worker_mocks(tmp_path, monkeypatch, barcode=MARVEL_BC, image_size=(1080, 1920))
+
+    tall_geo = _tall_left_edge_geometry(width=1080, height=1920)
+
+    def _fixed_geometry(pil, **kwargs):
+        return tall_geo
+
+    monkeypatch.setattr(
+        "app.services.p105_comic_barcode_regions.compute_barcode_region_geometry",
+        _fixed_geometry,
+    )
+
+    debug_item_id = 759607
+    engine = _engine()
+    with Session(engine) as session:
+        session.add(User(id=1, email="u@example.com", password_hash="x"))
+        intake = IntakeSession(
+            user_id=1,
+            session_token="tok-tall",
+            status="active",
+            expires_at=datetime(2099, 1, 1, tzinfo=timezone.utc),
+        )
+        session.add(intake)
+        session.commit()
+        item = IntakeSessionItem(
+            id=debug_item_id,
+            session_id=int(intake.id),
+            user_id=1,
+            storage_path=str(img.name),
+            status=ITEM_QUEUED,
+        )
+        session.add(item)
+        session.commit()
+        final = worker.process_intake_item(session, item_id=debug_item_id)
+        assert final == ITEM_NEEDS_FULL_COVER_PHOTO
+
+    region_json = p106_1_intake_debug_dir(intake_item_id=debug_item_id) / "region_debug.json"
+    assert region_json.is_file()
+    meta = json.loads(region_json.read_text(encoding="utf-8"))
+    assert meta["fingerprint_image_region"] == REGION_UNSAFE_PARTIAL_COVER
+    assert meta["full_cover_followup_required"] is True
+    assert meta["p106_1_review_candidates_count"] == 0
 
 
 def _jpeg_bytes(w: int, h: int) -> bytes:

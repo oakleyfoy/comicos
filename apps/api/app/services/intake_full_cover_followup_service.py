@@ -17,7 +17,7 @@ from app.services.photo_import_storage_service import REPO_ROOT, resolve_photo_i
 FULL_COVER_REASON_CODE = "needs_full_cover_photo"
 FULL_COVER_USER_MESSAGE = (
     "Barcode was read, but no barcode record exists in GCD or your catalog. "
-    "Take a full front-cover photo to identify by cover art."
+    "Add a full front-cover photo to identify by cover art."
 )
 
 

@@ -89,7 +89,7 @@ function intakeNeedsFullCoverPhoto(item: IntakeItem): boolean {
 }
 
 const FULL_COVER_PROMPT =
-  "Barcode was read, but no barcode record exists in GCD or your catalog. Take a full front-cover photo to identify by cover art.";
+  "Barcode was read, but no barcode record exists in GCD or your catalog. Add a full front-cover photo to identify by cover art.";
 
 function intakeFingerprintReviewCandidates(item: IntakeItem): IntakeReviewCandidateRow[] {
   if (intakeNeedsFullCoverPhoto(item)) return [];
@@ -427,6 +427,7 @@ export function IntakeReviewPage(): JSX.Element {
           const fpCandidates = intakeFingerprintReviewCandidates(item);
           const cvReview = intakeComicvineReviewCandidate(item);
           const canImport =
+            !needsFullCover &&
             !canConfirm &&
             reviewable &&
             item.status !== "auto_matched" &&

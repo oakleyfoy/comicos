@@ -177,5 +177,8 @@ describe("IntakeReviewPage", () => {
     renderReview();
     expect(await screen.findByTestId("full-cover-prompt-42")).toBeInTheDocument();
     expect(screen.getByTestId("full-cover-upload-42")).toHaveTextContent("Add full-cover photo");
+    expect(screen.getByTestId("full-cover-prompt-42")).toHaveTextContent(
+      "Add a full front-cover photo to identify by cover art.",
+    );
   });
 });
