@@ -300,46 +300,80 @@ def _vision_cover_read_for_recovery(
     """Read the cover with GPT vision when local OCR can't.
 
     Tesseract frequently reads the barcode strip digits instead of the printed
-    series/issue (e.g. garbage like ``9606"20629``), which defeats the facsimile
-    path. The GPT read reliably returns series/issue/publisher and a
-    variant_description that exposes facsimile/reprint editions. Gated to the
-    full-cover review path and behind the vision-sandbox flag, so it doesn't run
-    on every barcode-strip scan. All failures degrade silently.
+    series/issue (e.g. garbage like ``9606"20629`` or short junk like ``WAN``),
+    which defeats the facsimile path. The vision model reliably returns
+    series/issue/publisher and a variant_description that exposes facsimile/reprint
+    editions — the same capability that recognizes the book in chat.
+
+    Uses the confirmed-working sandbox model (gpt-4o) rather than the standalone
+    GPT-read tool's default (gpt-5), which the configured key may not be able to
+    call. Gated to the full-cover review path behind the sandbox flag + key. All
+    failures degrade silently.
     """
     settings = get_settings()
     if not getattr(settings, "photo_import_vision_sandbox", False):
         return None
-    if not getattr(settings, "openai_api_key", None):
+    api_key = getattr(settings, "openai_api_key", None)
+    if not api_key:
+        logger.info("p106_1.vision_cover_read_skipped item_id=%s reason=no_openai_key", intake_item_id)
         return None
+    model = getattr(settings, "photo_import_vision_sandbox_model", "") or "gpt-4o"
     try:
-        from app.services.gpt_comic_read_service import (
-            GptComicReadError,
-            read_comic_with_gpt,
-        )
+        from app.services.gpt_comic_vision_client import call_comic_vision
 
-        result = read_comic_with_gpt(image_bytes, filename=f"intake-{intake_item_id}")
+        parsed, _payload, _raw, model_used = call_comic_vision(
+            image_bytes,
+            model=model,
+            api_key=api_key,
+            log_context=f"p106_1 cover_read item_id={intake_item_id}",
+            image_detail="high",
+            max_image_side_px=2048,
+        )
     except Exception as exc:  # noqa: BLE001 - vision is best-effort
         logger.warning(
-            "p106_1.vision_cover_read_failed item_id=%s error=%s",
+            "p106_1.vision_cover_read_failed item_id=%s model=%s error=%s",
             intake_item_id,
+            model,
             str(exc)[:200],
         )
         return None
-    series = (result.series or "").strip() or None
+
+    book: dict[str, Any] = {}
+    comics = parsed.get("comics") if isinstance(parsed, dict) else None
+    if isinstance(comics, list):
+        for entry in comics:
+            if isinstance(entry, dict):
+                book = entry
+                break
+    elif isinstance(parsed, dict):
+        book = parsed
+
+    series = str(book.get("series") or "").strip() or None
     if not series:
+        logger.info(
+            "p106_1.vision_cover_read_empty item_id=%s model_used=%s", intake_item_id, model_used
+        )
         return None
+    issue_raw = book.get("issue_number")
+    issue_number: str | None = None
+    if issue_raw is not None and str(issue_raw).strip().lower() not in {"", "null", "none", "n/a"}:
+        issue_number = str(issue_raw).strip()
+    try:
+        confidence = max(0.0, min(1.0, float(book.get("confidence") or 0.0)))
+    except (TypeError, ValueError):
+        confidence = 0.0
+    reasoning = str(book.get("reasoning") or "").strip()
     blob = " ".join(
-        str(part or "")
-        for part in (result.variant_description, result.issue_title, result.reasoning)
+        str(book.get(k) or "") for k in ("variant_description", "issue_title", "reasoning")
     ).lower()
     return _VisionCoverRead(
         series=series,
-        issue_number=(result.issue_number or "").strip() or None,
-        publisher=(result.publisher or "").strip() or None,
-        year=_parse_year_hint(result.year),
+        issue_number=issue_number,
+        publisher=str(book.get("publisher") or "").strip() or None,
+        year=_parse_year_hint(book.get("year")),
         facsimile=bool(_REPRINT_DIGEST.search(blob)),
-        confidence=float(result.confidence or 0.0),
-        reasoning_excerpt=(result.reasoning or "").strip()[:300] or None,
+        confidence=confidence,
+        reasoning_excerpt=reasoning[:300] or None,
     )
 
 
@@ -589,6 +623,9 @@ def build_p106_1_intake_hint_snapshot(
         "ocr_confidence": hints.ocr_confidence,
         "inferred_series_hint": hints.series,
         "series_hint_reliable": has_reliable_series_hint(hints.series),
+        "vision_cover_read_used": hints.vision_cover_read_used,
+        "displayed_issue_number": hints.displayed_issue_number,
+        "barcode_issue_authoritative": hints.barcode_issue_authoritative,
         "facsimile_or_reprint": hints.facsimile_or_reprint,
         "fingerprint_candidate_count": fp_count,
         "fingerprint_candidate_catalog_issue_id": hints.fingerprint_candidate_catalog_issue_id,

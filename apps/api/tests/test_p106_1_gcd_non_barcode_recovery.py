@@ -409,7 +409,7 @@ def test_facsimile_surfaces_asm_122_review_candidates(
     assert {88300, 88301} <= {row["gcd_issue_id"] for row in diag["gcd_non_barcode_ranked"]}
 
 
-@patch("app.services.gpt_comic_read_service.read_comic_with_gpt")
+@patch("app.services.gpt_comic_vision_client.call_comic_vision")
 @patch("app.services.p106_1_gcd_non_barcode_recovery_service.get_settings")
 @patch("app.services.p106_1_gcd_non_barcode_recovery_service.extract_ocr_signal")
 def test_vision_fallback_recovers_cover_when_tesseract_garbles(
@@ -432,16 +432,27 @@ def test_vision_fallback_recovers_cover_when_tesseract_garbles(
     mock_settings.return_value = SimpleNamespace(
         photo_import_vision_sandbox=True,
         openai_api_key="sk-test",
+        photo_import_vision_sandbox_model="gpt-4o",
     )
-    mock_vision.return_value = SimpleNamespace(
-        series="Amazing Spider-Man",
-        issue_number="122",
-        publisher="Marvel",
-        issue_title="The Night Gwen Stacy Died",
-        variant_description="Facsimile Edition",
-        year="2023",
-        reasoning="Modern facsimile reprint of the 1973 cover.",
-        confidence=0.84,
+    # call_comic_vision returns (parsed, api_payload, raw_text, model_used)
+    mock_vision.return_value = (
+        {
+            "comics": [
+                {
+                    "series": "Amazing Spider-Man",
+                    "issue_number": "122",
+                    "publisher": "Marvel",
+                    "issue_title": "The Night Gwen Stacy Died",
+                    "variant_description": "Facsimile Edition",
+                    "year": "2023",
+                    "reasoning": "Modern facsimile reprint of the 1973 cover.",
+                    "confidence": 0.84,
+                }
+            ]
+        },
+        {},
+        "",
+        "gpt-4o",
     )
     item = _FakeIntakeItem(matched_issue_number="1", matched_publisher="Marvel")
     hints = gather_intake_gcd_recovery_hints(
