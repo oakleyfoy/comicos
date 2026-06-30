@@ -50,6 +50,7 @@ from app.services.intake_queue_service import (
 )
 from app.services.photo_import_storage_service import resolve_photo_import_storage_path
 from app.services.barcode_scan_consensus_service import suggest_corrected_barcode
+from app.services.intake_api_review_response_log_service import log_intake_item_api_response
 
 logger = logging.getLogger(__name__)
 
@@ -98,6 +99,7 @@ def _item_image_url(token: str, item_id: int) -> str:
 
 
 def _item_to_read(session: Session, item: IntakeSessionItem, *, token: str) -> IntakeItemRead:
+    db_candidates = list(candidates_for_item(session, item_id=int(item.id or 0)))
     candidates = [
         IntakeItemCandidateRead(
             id=int(c.id or 0),
@@ -111,7 +113,7 @@ def _item_to_read(session: Session, item: IntakeSessionItem, *, token: str) -> I
             source=c.source,
             rank=int(c.rank),
         )
-        for c in candidates_for_item(session, item_id=int(item.id or 0))
+        for c in db_candidates
     ]
     barcode_read: dict | None = None
     if item.barcode_read_json:
@@ -121,6 +123,7 @@ def _item_to_read(session: Session, item: IntakeSessionItem, *, token: str) -> I
                 barcode_read = parsed
         except json.JSONDecodeError:
             barcode_read = None
+    log_intake_item_api_response(item, db_candidates=db_candidates, barcode_read=barcode_read)
     return IntakeItemRead(
         id=int(item.id or 0),
         session_id=int(item.session_id),

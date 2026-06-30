@@ -34,7 +34,10 @@ from app.services.p106_barcode_gap_resolver_service import (
     P106_STATUS_UNRESOLVED,
     resolve_catalog_issue_for_gcd_barcode,
 )
-from app.services.photo_import_fingerprint_service import search_catalog_fingerprint_hits_for_crop_path
+from app.services.intake_p106_1_execution_trace_service import (
+    gated_search_catalog_fingerprint_hits_for_crop_path,
+    log_p106_1_before_fingerprint,
+)
 from app.services.recognition.ocr_matcher import extract_ocr_signal
 
 logger = logging.getLogger(__name__)
@@ -149,7 +152,20 @@ def _resolve_fingerprint_recovery_candidates(
     session: Session,
     *,
     image_path: Path | None,
+    intake_item_id: int | None = None,
+    fingerprint_region_safe: bool = True,
+    fingerprint_image_region: str = "unknown",
+    full_cover_followup_required: bool = False,
 ) -> list[FingerprintRecoveryCandidate]:
+    if intake_item_id is not None:
+        log_p106_1_before_fingerprint(
+            intake_item_id=int(intake_item_id),
+            fingerprint_region_safe=fingerprint_region_safe,
+            fingerprint_image_region=fingerprint_image_region,
+            full_cover_followup_required=full_cover_followup_required,
+        )
+    if not fingerprint_region_safe or full_cover_followup_required:
+        return []
     if image_path is None or not image_path.is_file():
         return []
     logger.info(
@@ -157,7 +173,7 @@ def _resolve_fingerprint_recovery_candidates(
         image_path,
         image_path.is_file(),
     )
-    hits = search_catalog_fingerprint_hits_for_crop_path(session, crop_path=image_path, limit=5)
+    hits = gated_search_catalog_fingerprint_hits_for_crop_path(session, crop_path=image_path, limit=5)
     out: list[FingerprintRecoveryCandidate] = []
     for hit in hits:
         catalog_issue_id = int(hit.issue_id)
@@ -263,6 +279,9 @@ def gather_intake_gcd_recovery_hints(
     image_path: Path | None,
     image_bytes: bytes | None,
     p105: Any,
+    fingerprint_region_safe: bool | None = None,
+    fingerprint_image_region: str | None = None,
+    full_cover_followup_required: bool = False,
 ) -> IntakeGcdRecoveryHints:
     publisher = (item.matched_publisher or "").strip() or None
     if not publisher:
@@ -338,9 +357,26 @@ def gather_intake_gcd_recovery_hints(
     from app.services.intake_fingerprint_image_region_service import assess_fingerprint_image_region
 
     region = assess_fingerprint_image_region(image_path, image_bytes=image_bytes)
+    region_safe = region.fingerprint_region_safe if fingerprint_region_safe is None else fingerprint_region_safe
+    region_kind = fingerprint_image_region or region.fingerprint_image_region
+    intake_id = int(getattr(item, "id", 0) or 0)
     fingerprint_candidates: list[FingerprintRecoveryCandidate] = []
-    if region.fingerprint_region_safe:
-        fingerprint_candidates = _resolve_fingerprint_recovery_candidates(session, image_path=image_path)
+    if region_safe and not full_cover_followup_required:
+        fingerprint_candidates = _resolve_fingerprint_recovery_candidates(
+            session,
+            image_path=image_path,
+            intake_item_id=intake_id or None,
+            fingerprint_region_safe=region_safe,
+            fingerprint_image_region=region_kind,
+            full_cover_followup_required=full_cover_followup_required,
+        )
+    elif intake_id:
+        log_p106_1_before_fingerprint(
+            intake_item_id=intake_id,
+            fingerprint_region_safe=region_safe,
+            fingerprint_image_region=region_kind,
+            full_cover_followup_required=full_cover_followup_required,
+        )
     fp_catalog_id, fp_gcd_id, fp_conf, fp_source = _primary_fingerprint_fields(fingerprint_candidates)
 
     return IntakeGcdRecoveryHints(
@@ -362,8 +398,8 @@ def gather_intake_gcd_recovery_hints(
         fingerprint_candidate_gcd_issue_id=fp_gcd_id,
         fingerprint_confidence=fp_conf,
         fingerprint_match_source=fp_source,
-        fingerprint_image_region=region.fingerprint_image_region,
-        fingerprint_region_safe=region.fingerprint_region_safe,
+        fingerprint_image_region=region_kind,
+        fingerprint_region_safe=region_safe,
         fingerprint_suppressed_reason=region.fingerprint_suppressed_reason,
     )
 
@@ -376,6 +412,9 @@ def build_p106_1_intake_hint_snapshot(
     image_path: Path | None,
     image_bytes: bytes | None,
     p105: Any,
+    full_cover_followup_required: bool = False,
+    fingerprint_region_safe: bool | None = None,
+    fingerprint_image_region: str | None = None,
 ) -> tuple[IntakeGcdRecoveryHints, dict[str, Any]]:
     """Gather cover/barcode hints once for logging and P106.1 enrichment."""
     hints = gather_intake_gcd_recovery_hints(
@@ -385,6 +424,9 @@ def build_p106_1_intake_hint_snapshot(
         image_path=image_path,
         image_bytes=image_bytes,
         p105=p105,
+        fingerprint_region_safe=fingerprint_region_safe,
+        fingerprint_image_region=fingerprint_image_region,
+        full_cover_followup_required=full_cover_followup_required,
     )
     fp_count = len(_qualified_fingerprint_candidates(hints.fingerprint_candidates))
     snapshot = {
@@ -750,7 +792,7 @@ def _fingerprint_gcd_boost(
         return _fingerprint_pts_for_row(session, hints, gcd_issue_id=gcd_issue_id)
     if image_path is None or not image_path.is_file():
         return 0.0
-    hits = search_catalog_fingerprint_hits_for_crop_path(session, crop_path=image_path, limit=5)
+    hits = gated_search_catalog_fingerprint_hits_for_crop_path(session, crop_path=image_path, limit=5)
     for hit in hits:
         if hit.confidence < _FINGERPRINT_MIN_CONFIDENCE:
             continue
@@ -905,7 +947,7 @@ def _fingerprint_similarity_for_instrumentation(
 ) -> list[dict[str, Any]]:
     if image_path is None or not image_path.is_file():
         return []
-    hits = search_catalog_fingerprint_hits_for_crop_path(session, crop_path=image_path, limit=5)
+    hits = gated_search_catalog_fingerprint_hits_for_crop_path(session, crop_path=image_path, limit=5)
     out: list[dict[str, Any]] = []
     for hit in hits:
         issue = session.get(CatalogIssue, int(hit.issue_id))

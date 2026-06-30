@@ -327,11 +327,15 @@ def persist_review_candidates_on_intake_item(
     add_candidate_fn: Any,
     clear_candidates_fn: Any,
 ) -> None:
+    from app.services.intake_p106_1_execution_trace_service import log_p106_1_persist
+
     if diagnosis.get("needs_full_cover_photo"):
         clear_candidates_fn(session, item_id)
+        log_p106_1_persist(candidates_written=0, status_written="skipped_needs_full_cover_photo")
         return
     if diagnosis.get("fingerprint_region_safe") is False:
         clear_candidates_fn(session, item_id)
+        log_p106_1_persist(candidates_written=0, status_written="skipped_unsafe_region")
         return
     region = str(diagnosis.get("fingerprint_image_region") or "")
     if region in {
@@ -340,11 +344,14 @@ def persist_review_candidates_on_intake_item(
         "unsafe_partial_cover_barcode_frame",
     }:
         clear_candidates_fn(session, item_id)
+        log_p106_1_persist(candidates_written=0, status_written=f"skipped_region_{region}")
         return
     tops = diagnosis.get("needs_review_top_candidates")
     if not isinstance(tops, list) or not tops:
+        log_p106_1_persist(candidates_written=0, status_written="skipped_no_review_tops")
         return
     clear_candidates_fn(session, item_id)
+    written = 0
     for rank, row in enumerate(tops[:3]):
         if not isinstance(row, dict):
             continue
@@ -363,6 +370,7 @@ def persist_review_candidates_on_intake_item(
                 "score": float(row.get("confidence") or 0.0) * 100.0,
             },
         )
+        written += 1
     cv = diagnosis.get("comicvine_review_candidate")
     if isinstance(cv, dict) and cv.get("import_ready"):
         add_candidate_fn(
@@ -380,3 +388,5 @@ def persist_review_candidates_on_intake_item(
                 "score": 85.0,
             },
         )
+        written += 1
+    log_p106_1_persist(candidates_written=written, status_written="persisted")

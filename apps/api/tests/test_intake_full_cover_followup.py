@@ -501,11 +501,20 @@ def test_full_cover_followup_reprocess_can_surface_fingerprint(
     paths_seen: list[Path] = []
 
     def _resolve(rel, **k):
-        if "fullcover" in str(rel):
+        rel_s = str(rel)
+        if "fullcover" in rel_s or rel_s == full_dest.name:
             return full_dest
         return strip
 
     monkeypatch.setattr(worker, "resolve_photo_import_storage_path", _resolve)
+    monkeypatch.setattr(
+        "app.services.intake_full_cover_followup_service.resolve_photo_import_storage_path",
+        _resolve,
+    )
+    monkeypatch.setattr(
+        "app.services.photo_import_storage_service.resolve_photo_import_storage_path",
+        _resolve,
+    )
 
     engine = _engine()
     with Session(engine) as session:
@@ -537,7 +546,7 @@ def test_full_cover_followup_reprocess_can_surface_fingerprint(
             return []
 
         monkeypatch.setattr(
-            "app.services.p106_1_gcd_non_barcode_recovery_service.search_catalog_fingerprint_hits_for_crop_path",
+            "app.services.photo_import_fingerprint_service.search_catalog_fingerprint_hits_for_crop_path",
             _fake_search,
         )
         worker.process_intake_item(session, item_id=int(item.id))

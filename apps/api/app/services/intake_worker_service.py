@@ -91,10 +91,7 @@ from app.services.photo_import_upc_barcode_decoder import (
     collect_raw_upc_candidates_from_pil,
     decode_upc_from_image_bytes,
 )
-from app.services.photo_import_fingerprint_service import (
-    fingerprint_match_score_for_crop_path,
-    search_catalog_fingerprint_hits_for_crop_path,
-)
+from app.services.photo_import_fingerprint_service import fingerprint_match_score_for_crop_path
 from app.services.photo_import_storage_service import resolve_photo_import_storage_path
 from app.services.recognition.catalog_matcher import load_catalog_issue_identity
 from app.services.scanner_barcode_field_test_service import (
@@ -528,6 +525,61 @@ def _should_call_comicvine_after_p106_pipeline(
     return True
 
 
+def _intake_full_cover_followup_gate(
+    *,
+    gap_diag: dict[str, Any] | None,
+    primary_region: Any,
+    recognition_region: Any,
+    item: IntakeSessionItem,
+    local_catalog_hit: bool,
+    p106_exact_barcode_authority: bool,
+    normalized: str,
+    using_full_cover_recognition: bool = False,
+) -> tuple[bool, bool]:
+    """Return (full_cover_followup_required, skip_fingerprint_search)."""
+    from app.services.intake_full_cover_followup_service import (
+        gcd_barcode_lookup_missed,
+        intake_has_full_cover_followup_image,
+        should_require_full_cover_followup,
+    )
+
+    has_full_cover_image = intake_has_full_cover_followup_image(item) or using_full_cover_recognition
+    unsafe_fingerprint_region = not recognition_region.fingerprint_region_safe or (
+        not primary_region.fingerprint_region_safe and not has_full_cover_image
+    )
+    barcode_path_miss = (
+        gcd_barcode_lookup_missed(gap_diag or {})
+        and bool(normalized)
+        and not local_catalog_hit
+        and not p106_exact_barcode_authority
+    )
+    full_cover_required = should_require_full_cover_followup(
+        gap_diag=gap_diag,
+        primary_region=primary_region,
+        recognition_region=recognition_region,
+        has_full_cover_image=has_full_cover_image,
+        local_catalog_hit=local_catalog_hit,
+        p106_exact_barcode_authority=p106_exact_barcode_authority,
+        barcode_decoded=bool(normalized),
+    )
+    if barcode_path_miss and (full_cover_required or unsafe_fingerprint_region) and not has_full_cover_image:
+        full_cover_required = True
+    skip_fp = full_cover_required or not recognition_region.fingerprint_region_safe
+    return full_cover_required, skip_fp
+
+
+def _fingerprint_review_candidate_count(tops: Any) -> int:
+    if not isinstance(tops, list):
+        return 0
+    n = 0
+    for row in tops:
+        if not isinstance(row, dict):
+            continue
+        if str(row.get("source") or "fingerprint") == "fingerprint":
+            n += 1
+    return n
+
+
 def _cover_confirms_barcode_match(
     session: Session,
     *,
@@ -572,6 +624,15 @@ def process_intake_item(session: Session, *, item_id: int) -> str:
 
     trace = _begin_barcode_trace(item)
 
+    from app.services.intake_p106_1_execution_trace_service import (
+        activate_intake_p106_1_trace,
+        format_execution_trace,
+        log_p106_1_after_suppression,
+        set_fingerprint_search_gate,
+    )
+
+    _p106_1_trace_cm = activate_intake_p106_1_trace(item_id)
+    _p106_1_exec_trace = _p106_1_trace_cm.__enter__()
     try:
         abs_path = resolve_photo_import_storage_path(item.storage_path, image_id=item_id)
         if not abs_path.is_file():
@@ -918,6 +979,22 @@ def process_intake_item(session: Session, *, item_id: int) -> str:
                 )
 
                 p106_1_attempted = True
+                full_cover_precheck, skip_fp_search = _intake_full_cover_followup_gate(
+                    gap_diag=gap_diag,
+                    primary_region=primary_region,
+                    recognition_region=recognition_region,
+                    item=item,
+                    local_catalog_hit=local_catalog_hit,
+                    p106_exact_barcode_authority=p106_exact_barcode_authority,
+                    normalized=normalized,
+                    using_full_cover_recognition=using_full_cover_followup,
+                )
+                set_fingerprint_search_gate(
+                    skip_fingerprint_search=skip_fp_search,
+                    full_cover_followup_required=full_cover_precheck,
+                    fingerprint_region_safe=recognition_region.fingerprint_region_safe,
+                    fingerprint_image_region=recognition_region.fingerprint_image_region,
+                )
                 recovery_hints, hint_snapshot = build_p106_1_intake_hint_snapshot(
                     session,
                     item=item,
@@ -925,6 +1002,9 @@ def process_intake_item(session: Session, *, item_id: int) -> str:
                     image_path=recognition_path,
                     image_bytes=recognition_bytes,
                     p105=p105,
+                    full_cover_followup_required=full_cover_precheck,
+                    fingerprint_region_safe=recognition_region.fingerprint_region_safe,
+                    fingerprint_image_region=recognition_region.fingerprint_image_region,
                 )
                 logger.info(
                     "p106_1.intake_hints_before_enrich %s",
@@ -1073,9 +1153,9 @@ def process_intake_item(session: Session, *, item_id: int) -> str:
                     )
                     from app.services.p106_barcode_gap_resolver_service import barcode_gap_payload_from_diagnosis
 
-                    unsafe_fingerprint_region = (
-                        not recognition_region.fingerprint_region_safe
-                        or not primary_region.fingerprint_region_safe
+                    has_full_cover_image = intake_has_full_cover_followup_image(item) or using_full_cover_followup
+                    unsafe_fingerprint_region = not recognition_region.fingerprint_region_safe or (
+                        not primary_region.fingerprint_region_safe and not has_full_cover_image
                     )
                     if unsafe_fingerprint_region:
                         gap_diag.pop("needs_review_top_candidates", None)
@@ -1095,12 +1175,12 @@ def process_intake_item(session: Session, *, item_id: int) -> str:
                         gap_diag=gap_diag,
                         primary_region=primary_region,
                         recognition_region=recognition_region,
-                        has_full_cover_image=intake_has_full_cover_followup_image(item),
+                        has_full_cover_image=has_full_cover_image,
                         local_catalog_hit=local_catalog_hit,
                         p106_exact_barcode_authority=p106_exact_barcode_authority,
                         barcode_decoded=bool(normalized),
                     )
-                    if barcode_path_miss and (full_cover_required or unsafe_fingerprint_region):
+                    if barcode_path_miss and (full_cover_required or unsafe_fingerprint_region) and not has_full_cover_image:
                         full_cover_required = True
 
                     debug_payload: dict[str, Any] = {
@@ -1140,6 +1220,15 @@ def process_intake_item(session: Session, *, item_id: int) -> str:
                             item_id,
                             exc_info=True,
                         )
+
+                    fp_review_count = _fingerprint_review_candidate_count(tops)
+                    log_p106_1_after_suppression(
+                        review_candidates_count=review_count,
+                        fingerprint_candidates_count=fp_review_count,
+                        final_status=ITEM_NEEDS_FULL_COVER_PHOTO
+                        if full_cover_required
+                        else ITEM_NEEDS_REVIEW,
+                    )
 
                     if full_cover_required and barcode_path_miss:
                         apply_full_cover_followup_to_diagnosis(
@@ -1326,6 +1415,13 @@ def process_intake_item(session: Session, *, item_id: int) -> str:
     except Exception as exc:  # noqa: BLE001
         logger.exception("intake.item.failed item_id=%s", item_id)
         return _fail(session, item, f"Processing error: {exc}")
+    finally:
+        logger.info(
+            "P106_1_EXECUTION_TRACE item_id=%s\n%s",
+            item_id,
+            format_execution_trace(_p106_1_exec_trace),
+        )
+        _p106_1_trace_cm.__exit__(None, None, None)
 
 
 def _finish(session: Session, item: IntakeSessionItem, *, status: str, reason: str | None) -> str:
