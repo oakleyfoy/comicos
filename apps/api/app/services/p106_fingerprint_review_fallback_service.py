@@ -415,9 +415,15 @@ def persist_review_candidates_on_intake_item(
         log_p106_1_persist(candidates_written=0, status_written="skipped_needs_full_cover_photo")
         return
     if diagnosis.get("fingerprint_region_safe") is False:
-        clear_candidates_fn(session, item_id)
-        log_p106_1_persist(candidates_written=0, status_written="skipped_unsafe_region")
-        return
+        tops = diagnosis.get("needs_review_top_candidates")
+        has_cover_read = diagnosis.get("cover_read_identity_detected") or (
+            isinstance(tops, list)
+            and any(isinstance(r, dict) and r.get("source") == "cover_read" for r in tops)
+        )
+        if not has_cover_read:
+            clear_candidates_fn(session, item_id)
+            log_p106_1_persist(candidates_written=0, status_written="skipped_unsafe_region")
+            return
     region = str(diagnosis.get("fingerprint_image_region") or "")
     if region in {
         "barcode_strip",

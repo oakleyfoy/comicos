@@ -1094,9 +1094,11 @@ def process_intake_item(session: Session, *, item_id: int) -> str:
                     normalized=normalized,
                     using_full_cover_recognition=using_full_cover_followup,
                 )
+                gcd_barcode_row_present = int((gap_diag or {}).get("gcd_match_count") or 0) > 0
+                hint_full_cover_gate = full_cover_precheck and not gcd_barcode_row_present
                 set_fingerprint_search_gate(
                     skip_fingerprint_search=skip_fp_search,
-                    full_cover_followup_required=full_cover_precheck,
+                    full_cover_followup_required=hint_full_cover_gate,
                     fingerprint_region_safe=recognition_region.fingerprint_region_safe,
                     fingerprint_image_region=recognition_region.fingerprint_image_region,
                 )
@@ -1107,7 +1109,7 @@ def process_intake_item(session: Session, *, item_id: int) -> str:
                     image_path=recognition_path,
                     image_bytes=recognition_bytes,
                     p105=p105,
-                    full_cover_followup_required=full_cover_precheck,
+                    full_cover_followup_required=hint_full_cover_gate,
                     fingerprint_region_safe=recognition_region.fingerprint_region_safe,
                     fingerprint_image_region=recognition_region.fingerprint_image_region,
                 )
@@ -1250,6 +1252,42 @@ def process_intake_item(session: Session, *, item_id: int) -> str:
                     )
                     from app.services.p106_barcode_gap_resolver_service import barcode_gap_payload_from_diagnosis
 
+                    if (
+                        candidate is None
+                        and gap_diag
+                        and int(gap_diag.get("gcd_match_count") or 0) > 0
+                        and not _gap_diagnosis_has_cover_read_review(gap_diag)
+                        and recognition_bytes
+                    ):
+                        from app.services.p106_1_gcd_non_barcode_recovery_service import (
+                            build_p106_1_intake_hint_snapshot,
+                            enrich_gap_diagnosis_with_gcd_non_barcode_recovery,
+                        )
+
+                        retry_hints, _ = build_p106_1_intake_hint_snapshot(
+                            session,
+                            item=item,
+                            barcode=normalized,
+                            image_path=recognition_path,
+                            image_bytes=recognition_bytes,
+                            p105=p105,
+                            full_cover_followup_required=False,
+                            fingerprint_region_safe=recognition_region.fingerprint_region_safe,
+                            fingerprint_image_region=recognition_region.fingerprint_image_region,
+                        )
+                        gap_diag = enrich_gap_diagnosis_with_gcd_non_barcode_recovery(
+                            session,
+                            item=item,
+                            barcode=normalized,
+                            gcd_path=gcd_path,
+                            cache_path=cache_path,
+                            image_path=recognition_path,
+                            image_bytes=recognition_bytes,
+                            prior_diagnosis=gap_diag,
+                            p105=p105,
+                            recovery_hints=retry_hints,
+                        )
+
                     has_full_cover_image = intake_has_full_cover_followup_image(item) or using_full_cover_followup
                     unsafe_fingerprint_region = not recognition_region.fingerprint_region_safe or (
                         not primary_region.fingerprint_region_safe and not has_full_cover_image
@@ -1354,6 +1392,34 @@ def process_intake_item(session: Session, *, item_id: int) -> str:
                         except Exception:
                             logger.warning(
                                 "intake.full_cover_followup.display_failed item_id=%s",
+                                item_id,
+                                exc_info=True,
+                            )
+                        session.add(item)
+                        session.flush()
+                        return _finish(
+                            session,
+                            item,
+                            status=ITEM_NEEDS_FULL_COVER_PHOTO,
+                            reason=FULL_COVER_USER_MESSAGE,
+                        )
+
+                    if (
+                        not _gap_diagnosis_has_cover_read_review(gap_diag)
+                        and int((gap_diag or {}).get("gcd_match_count") or 0) > 0
+                        and not has_full_cover_image
+                    ):
+                        apply_full_cover_followup_to_diagnosis(
+                            gap_diag,
+                            primary_region,
+                            recognition_region=recognition_region,
+                        )
+                        _clear_fingerprint_artifacts(session, item_id=int(item.id or 0), gap_diag=gap_diag)
+                        try:
+                            _apply_p106_diagnosis_to_intake_item(item, gap_diag=gap_diag)
+                        except Exception:
+                            logger.warning(
+                                "intake.gcd_barcode_cover_read_fallback item_id=%s",
                                 item_id,
                                 exc_info=True,
                             )

@@ -446,7 +446,7 @@ def gather_intake_gcd_recovery_hints(
     # a barcode strip in the corner routinely makes it miss "full_cover", which is
     # exactly the case we need vision for. When there's no readable cover (e.g. a
     # bare barcode crop) the vision read returns None and we fall through untouched.
-    run_vision = bool(image_bytes) and not full_cover_followup_required
+    run_vision = bool(image_bytes)
     if run_vision:
         vision = _vision_cover_read_for_recovery(
             image_bytes, intake_item_id=int(getattr(item, "id", 0) or 0)
@@ -1491,13 +1491,22 @@ def _finalize_p106_1_diagnosis_with_fingerprint_review(
     return base
 
 
-def _p106_1_cover_identity_override(hints: IntakeGcdRecoveryHints) -> bool:
+def _p106_1_cover_identity_override(
+    hints: IntakeGcdRecoveryHints,
+    *,
+    prior_diagnosis: dict[str, Any] | None = None,
+) -> bool:
     """Cover/OCR identity should win over a misleading exact-barcode GCD hit (facsimile UPC)."""
-    return bool(
+    if (
         hints.vision_cover_read_used
         or hints.facsimile_or_reprint
         or hints.barcode_issue_authoritative is False
-    )
+    ):
+        return True
+    prior = prior_diagnosis or {}
+    if int(prior.get("gcd_match_count") or 0) > 0 and prior.get("exact_barcode_path"):
+        return True
+    return False
 
 
 def diagnose_gcd_non_barcode_recovery(
@@ -1515,11 +1524,11 @@ def diagnose_gcd_non_barcode_recovery(
     base["normalized_barcode"] = normalize_scan_preserving_supplement(barcode) or barcode
     base["fingerprint_candidate_count"] = len(_qualified_fingerprint_candidates(hints.fingerprint_candidates))
     prior_gcd_hits = int(prior_diagnosis.get("gcd_match_count") or 0)
-    if prior_gcd_hits > 0 and not _p106_1_cover_identity_override(hints):
+    if prior_gcd_hits > 0 and not _p106_1_cover_identity_override(hints, prior_diagnosis=prior_diagnosis):
         base["p106_1_skipped"] = True
         base["p106_1_skip_reason"] = "prior_p106_gcd_match_count_nonzero"
         return _finalize_p106_1_diagnosis_with_fingerprint_review(session, base, hints=hints, barcode=barcode)
-    if prior_gcd_hits > 0 and _p106_1_cover_identity_override(hints):
+    if prior_gcd_hits > 0 and _p106_1_cover_identity_override(hints, prior_diagnosis=prior_diagnosis):
         base["ready_to_auto_import"] = False
         base["exact_barcode_path"] = False
         base.setdefault("status", P106_STATUS_REVIEW_REQUIRED)
@@ -1856,7 +1865,7 @@ def enrich_gap_diagnosis_with_gcd_non_barcode_recovery(
             p105=p105,
         )
     prior_gcd_hits = int(prior_diagnosis.get("gcd_match_count") or 0)
-    if prior_gcd_hits > 0 and not _p106_1_cover_identity_override(hints):
+    if prior_gcd_hits > 0 and not _p106_1_cover_identity_override(hints, prior_diagnosis=prior_diagnosis):
         logger.info(
             "p106_1.skipped barcode=%s prior_gcd_match_count=%s prior_reason=%s prior_status=%s",
             barcode,
