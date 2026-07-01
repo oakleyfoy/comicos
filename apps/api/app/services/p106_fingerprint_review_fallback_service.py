@@ -282,10 +282,13 @@ def attach_fingerprint_review_to_diagnosis(
     if not top:
         return bundle
     existing = diagnosis.get("needs_review_top_candidates")
-    if diagnosis.get("facsimile_reprint_detected") and isinstance(existing, list) and existing:
-        # Facsimile/reprint identity (cover OCR + GCD edition match) takes priority over
-        # weaker fingerprint guesses. Keep facsimile rows first, append any new
-        # fingerprint rows below for completeness.
+    if (
+        diagnosis.get("facsimile_reprint_detected")
+        or diagnosis.get("cover_read_identity_detected")
+    ) and isinstance(existing, list) and existing:
+        # Facsimile/reprint identity (cover OCR + GCD edition match) or a confident
+        # GPT cover read takes priority over weaker fingerprint guesses. Keep those
+        # identity rows first, append any new fingerprint rows below for completeness.
         seen = {
             _normalize_identity_triple(
                 publisher=str(r.get("publisher") or ""),

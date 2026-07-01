@@ -892,6 +892,41 @@ def _publisher_matches(hint: str | None, candidate: str | None) -> bool:
     return series_names_compatible(a, b)
 
 
+def _vision_cover_read_review_candidate(hints: IntakeGcdRecoveryHints) -> dict[str, Any] | None:
+    """Build a review candidate straight from the GPT cover read.
+
+    The local GCD database is a subset and frequently lacks the exact issue a
+    collector is scanning (e.g. a 1970s book or a modern facsimile), so a series
+    + issue query returns nothing to score. When that happens but the vision read
+    confidently identified the cover, surface *that* identity as the top review
+    candidate instead of falling through to an unrelated fingerprint guess. This
+    is the "chat instantly knows it's Amazing Spider-Man #122" identity, made
+    visible in the intake queue. It carries no catalog_issue_id (no local row to
+    attach), so it is review-only, never auto-imported.
+    """
+    if not hints.vision_cover_read_used:
+        return None
+    series = (hints.series or hints.ocr_title or "").strip()
+    issue = (hints.displayed_issue_number or hints.issue_number or "").strip()
+    if not has_reliable_series_hint(series) or not issue:
+        return None
+    return {
+        "catalog_issue_id": None,
+        "series": series,
+        "title": series,
+        "issue_number": issue,
+        "publisher": (hints.publisher or "").strip() or None,
+        "year": str(hints.year) if hints.year is not None else None,
+        "confidence": round(float(hints.ocr_confidence or 0.0), 4),
+        "source": "cover_read",
+        "cover_url": None,
+        "gcd_issue_id": None,
+        "comicvine_ids": [],
+        "facsimile": bool(hints.facsimile_or_reprint),
+        "is_facsimile_reprint": bool(hints.facsimile_or_reprint),
+    }
+
+
 def _series_match_evaluation(
     hints: IntakeGcdRecoveryHints,
     row: dict[str, Any],
@@ -1635,6 +1670,31 @@ def diagnose_gcd_non_barcode_recovery(
                 instrumentation["facsimile_candidate_count"] = len(facsimile_candidates)
                 instrumentation["ui_finish_reason"] = (
                     "Likely facsimile/reprint — showing closest catalog editions"
+                )
+        if not base.get("needs_review_top_candidates"):
+            # GCD (a subset DB) had no scorable row for the cover-read issue. If the
+            # vision read confidently identified the book, surface that identity as the
+            # top review candidate so the collector sees the real book (e.g. Amazing
+            # Spider-Man #122 facsimile) instead of an unrelated fingerprint guess. The
+            # fingerprint rows still get appended below by the finalize step.
+            vision_candidate = _vision_cover_read_review_candidate(hints)
+            if vision_candidate is not None:
+                base["cover_read_identity_detected"] = True
+                if vision_candidate.get("facsimile"):
+                    base["facsimile_reprint_detected"] = True
+                base["needs_review_top_candidates"] = [vision_candidate]
+                base["review_decision"] = "cover_read_identity"
+                base["status"] = P106_STATUS_REVIEW_REQUIRED
+                base.setdefault("gcd_series", vision_candidate.get("series"))
+                base.setdefault("gcd_issue_number", vision_candidate.get("issue_number"))
+                base.setdefault("gcd_publisher", vision_candidate.get("publisher"))
+                instrumentation["cover_read_identity_detected"] = True
+                instrumentation["ui_finish_reason"] = (
+                    "Cover reads {series} #{issue}"
+                    + (" — likely facsimile/reprint" if vision_candidate.get("facsimile") else "")
+                ).format(
+                    series=vision_candidate.get("series"),
+                    issue=vision_candidate.get("issue_number"),
                 )
         return _finalize_p106_1_diagnosis_with_fingerprint_review(session, base, hints=hints, barcode=barcode)
 

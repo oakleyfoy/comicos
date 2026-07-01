@@ -173,6 +173,12 @@ export function acceptIntakeItem(itemId: number): Promise<IntakeItem> {
   return requestIntake<IntakeItem>(`/api/v1/intake/items/${itemId}/accept`, { method: "POST" });
 }
 
+export function acceptIntakeCoverReadIdentity(itemId: number): Promise<IntakeItem> {
+  return requestIntake<IntakeItem>(`/api/v1/intake/items/${itemId}/accept-cover-read`, {
+    method: "POST",
+  });
+}
+
 export function chooseIntakeItemIssue(
   itemId: number,
   catalogIssueId: number,

@@ -29,6 +29,7 @@ from app.schemas.intake_queue import (
     IntakeSessionRead,
     IntakeSessionStatusPayload,
 )
+from app.services.intake_cover_read_accept_service import accept_intake_cover_read_identity
 from app.services.intake_queue_service import (
     accept_intake_item,
     add_all_high_confidence,
@@ -313,6 +314,18 @@ def choose_item_endpoint(
         owner_user_id=int(current_user.id),
         catalog_issue_id=payload.catalog_issue_id,
         variant_id=payload.variant_id,
+    )
+    return _item_response(session, item)
+
+
+@intake_router.post("/items/{item_id}/accept-cover-read", response_model=IntakeItemRead)
+def accept_cover_read_endpoint(
+    item_id: int,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> IntakeItemRead:
+    item = accept_intake_cover_read_identity(
+        session, item_id=item_id, owner_user_id=int(current_user.id)
     )
     return _item_response(session, item)
 

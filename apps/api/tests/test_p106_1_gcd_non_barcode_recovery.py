@@ -505,6 +505,90 @@ def test_vision_fallback_skipped_when_no_openai_key(
     assert hints.vision_cover_read_used is False
 
 
+@patch("app.services.gpt_comic_vision_client.call_comic_vision")
+@patch("app.services.p106_1_gcd_non_barcode_recovery_service.get_settings")
+@patch("app.services.p106_1_gcd_non_barcode_recovery_service.extract_ocr_signal")
+def test_vision_cover_read_surfaces_review_candidate_without_gcd_match(
+    mock_ocr: MagicMock,
+    mock_settings: MagicMock,
+    mock_vision: MagicMock,
+    session: Session,
+    tmp_path: Path,
+) -> None:
+    from types import SimpleNamespace
+
+    mock_ocr.return_value = MagicMock(
+        confidence=0.2, title="bLLOO", issue_number=None, publisher=None, raw_text="garbage"
+    )
+    mock_settings.return_value = SimpleNamespace(
+        photo_import_vision_sandbox=False,
+        openai_api_key="sk-test",
+        photo_import_vision_sandbox_model="gpt-4o",
+    )
+    mock_vision.return_value = (
+        {
+            "comics": [
+                {
+                    "series": "The Amazing Spider-Man",
+                    "issue_number": "122",
+                    "publisher": "Marvel",
+                    "year": 1973,
+                    "confidence": 0.95,
+                    "reasoning": "Cover reads ASM 122",
+                }
+            ]
+        },
+        {},
+        "{}",
+        "gpt-4o",
+    )
+    bc = "75960620629200111"
+    # Issue #122 exists in GCD but for unrelated series — publisher filter leaves nothing scorable.
+    gcd_path = _gcd_db(
+        tmp_path,
+        rows=[
+            {
+                "gcd_issue_id": 7001,
+                "series": "Young Romance",
+                "number": "122",
+                "barcode": None,
+                "title": "Take Me Back",
+                "notes": "",
+                "key_date": "1950-01-00",
+                "series_id": 10,
+                "publisher_id": 2,
+            },
+        ],
+    )
+    item = _FakeIntakeItem(matched_issue_number="1", matched_publisher="Marvel")
+    hints = gather_intake_gcd_recovery_hints(
+        session,
+        item=item,
+        normalized_barcode=bc,
+        image_path=None,
+        image_bytes=b"fake-cover",
+        p105=None,
+        fingerprint_region_safe=True,
+        fingerprint_image_region="full_cover",
+    )
+    assert hints.vision_cover_read_used is True
+    diag = diagnose_gcd_non_barcode_recovery(
+        session,
+        barcode=bc,
+        gcd_path=gcd_path,
+        cache_path=None,
+        hints=hints,
+        image_path=None,
+        prior_diagnosis={"gcd_match_count": 0, "normalized_barcode": bc},
+    )
+    tops = diag.get("needs_review_top_candidates")
+    assert isinstance(tops, list) and tops
+    assert tops[0].get("source") == "cover_read"
+    assert tops[0].get("series") == "The Amazing Spider-Man"
+    assert tops[0].get("issue_number") == "122"
+    assert diag.get("cover_read_identity_detected") is True
+
+
 def test_has_reliable_series_hint_rejects_blank_and_generic() -> None:
     assert has_reliable_series_hint(None) is False
     assert has_reliable_series_hint("") is False

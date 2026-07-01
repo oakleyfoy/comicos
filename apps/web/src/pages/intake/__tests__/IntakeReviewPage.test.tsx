@@ -332,6 +332,62 @@ describe("IntakeReviewPage", () => {
     expect(list).toHaveTextContent("Facsimile / reprint");
   });
 
+  it("offers Use this book when cover-read is the top candidate", async () => {
+    const acceptSpy = vi.spyOn(intake, "acceptIntakeCoverReadIdentity").mockResolvedValue({
+      ...baseReview.items[0],
+      id: 56,
+      status: "ready_for_review",
+      selected_catalog_issue_id: 999,
+    });
+    vi.spyOn(intake, "getIntakeReview").mockResolvedValue({
+      ...baseReview,
+      counts: { ...baseReview.counts, needs_review: 1 },
+      items: [
+        {
+          ...baseReview.items[0],
+          id: 56,
+          status: "needs_review",
+          selected_catalog_issue_id: null,
+          matched_series: "bLLOO",
+          matched_issue_number: "1",
+          barcode_read: {
+            barcode_gap: {
+              facsimile_reprint_detected: true,
+              recovery_hints: {
+                vision_cover_read_used: true,
+                series: "The Amazing Spider-Man",
+                issue_number: "122",
+                ocr_title: "The Amazing Spider-Man",
+              },
+              needs_review_top_candidates: [
+                {
+                  series: "The Amazing Spider-Man",
+                  issue_number: "122",
+                  publisher: "Marvel",
+                  confidence: 0.95,
+                  source: "cover_read",
+                  is_facsimile_reprint: true,
+                },
+                {
+                  series: "Silver Surfer",
+                  issue_number: "84",
+                  publisher: "Marvel",
+                  confidence: 0.75,
+                  source: "fingerprint",
+                },
+              ],
+            },
+          },
+          candidates: [],
+        },
+      ],
+    });
+    renderReview();
+    expect(await screen.findByTestId("cover-read-action-56")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Use this book" }));
+    await waitFor(() => expect(acceptSpy).toHaveBeenCalledWith(56));
+  });
+
   it("hands off to the phone via QR on a desktop (no camera)", async () => {
     stubCoarsePointer(false); // desktop: cannot reach a camera, must hand off
     vi.spyOn(intake, "getIntakeReview").mockResolvedValue(fullCoverReview);

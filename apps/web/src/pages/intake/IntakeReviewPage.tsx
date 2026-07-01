@@ -4,6 +4,7 @@ import QRCode from "qrcode";
 
 import {
   acceptIntakeItem,
+  acceptIntakeCoverReadIdentity,
   addAllHighConfidence,
   addIntakeItemToInventory,
   chooseIntakeItemIssue,
@@ -91,10 +92,27 @@ function intakeFacsimileReprintDetected(item: IntakeItem): boolean {
 }
 
 function candidateSourceLabel(row: IntakeReviewCandidateRow): string {
+  if (row.source === "cover_read") {
+    return row.is_facsimile_reprint ? "Cover read · facsimile" : "Cover read";
+  }
   if (row.is_facsimile_reprint || row.source === "gcd_facsimile") return "Facsimile / reprint";
   if (row.source === "gcd_non_barcode") return "Catalog (GCD)";
   if (row.source === "comicvine") return "ComicVine";
   return "Fingerprint";
+}
+
+function intakeVisionCoverReadUsed(item: IntakeItem): boolean {
+  const gap = intakeBarcodeGap(item);
+  const rh = gap?.recovery_hints;
+  if (rh && typeof rh === "object") {
+    return (rh as Record<string, unknown>).vision_cover_read_used === true;
+  }
+  return false;
+}
+
+function intakeCoverReadReviewCandidate(item: IntakeItem): IntakeReviewCandidateRow | null {
+  const rows = intakeFingerprintReviewCandidates(item);
+  return rows.find((row) => row.source === "cover_read") ?? null;
 }
 
 function intakeNeedsFullCoverPhoto(item: IntakeItem): boolean {
@@ -215,10 +233,13 @@ function intakeRecoveryHintIssueNumber(item: IntakeItem): string {
 
 function intakeHeadline(item: IntakeItem): string {
   const gap = intakeBarcodeGap(item);
-  const gapSeries = typeof gap?.gcd_series === "string" ? gap.gcd_series.trim() : "";
-  const gapNum = typeof gap?.gcd_issue_number === "string" ? gap.gcd_issue_number.trim() : "";
   const hintSeries = intakeRecoveryHintSeries(item);
   const hintNum = intakeRecoveryHintIssueNumber(item);
+  if (intakeVisionCoverReadUsed(item) && hintSeries) {
+    return [hintSeries, hintNum ? `#${hintNum.replace(/^#/, "")}` : null].filter(Boolean).join(" ");
+  }
+  const gapSeries = typeof gap?.gcd_series === "string" ? gap.gcd_series.trim() : "";
+  const gapNum = typeof gap?.gcd_issue_number === "string" ? gap.gcd_issue_number.trim() : "";
   const gapAuthoritative =
     gap?.action === "auto_import_available" ||
     (typeof gap?.gcd_match_count === "number" && gap.gcd_match_count === 1);
@@ -572,6 +593,7 @@ export function IntakeReviewPage(): JSX.Element {
           const gapAutoImport =
             gap?.action === "auto_import_available" || gap?.ready_to_auto_import === true;
           const fpCandidates = intakeFingerprintReviewCandidates(item);
+          const coverReadCandidate = intakeCoverReadReviewCandidate(item);
           const cvReview = intakeComicvineReviewCandidate(item);
           const canImport =
             !needsFullCover &&
@@ -634,6 +656,23 @@ export function IntakeReviewPage(): JSX.Element {
                     Barcode isn&apos;t authoritative — the cover reads like a facsimile/reprint.
                     Showing the closest catalog editions first.
                   </p>
+                ) : null}
+                {coverReadCandidate && !canConfirm ? (
+                  <div className="mt-2" data-testid={`cover-read-action-${item.id}`}>
+                    <p className="mb-1.5 text-sm text-emerald-200/90">
+                      Cover identification is confident — use this book to link the barcode and update GCD.
+                    </p>
+                    <button
+                      type="button"
+                      disabled={busy}
+                      onClick={() =>
+                        void runAction(item.id, () => acceptIntakeCoverReadIdentity(item.id))
+                      }
+                      className="rounded-lg bg-emerald-700 px-3 py-1.5 text-xs font-semibold disabled:opacity-50"
+                    >
+                      Use this book
+                    </button>
+                  </div>
                 ) : null}
                 {fpCandidates.length > 0 ? (
                   <ul className="mt-2 space-y-1.5" data-testid={`fp-candidates-${item.id}`}>
