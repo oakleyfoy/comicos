@@ -39,6 +39,7 @@ MATCH_SOURCE_LEARNED = "learned_barcode"
 MATCH_SOURCE_CATALOG_UPC = "catalog_upc"
 MATCH_SOURCE_COMICVINE = "comicvine"
 MATCH_SOURCE_MANUAL = "manual"
+MATCH_SOURCE_COVER_READ = "cover_read"
 
 
 class IntakeSession(SQLModel, table=True):

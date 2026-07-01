@@ -25,8 +25,12 @@ async function requestIntake<T>(path: string, init?: RequestInit): Promise<T> {
   if (!res.ok) {
     let detail = `${path} failed (${res.status})`;
     try {
-      const body = (await res.json()) as { detail?: string };
-      if (body.detail) detail = body.detail;
+      const body = (await res.json()) as { detail?: unknown };
+      if (typeof body.detail === "string" && body.detail.trim()) {
+        detail = body.detail;
+      } else if (body.detail != null) {
+        detail = JSON.stringify(body.detail);
+      }
     } catch {
       /* ignore */
     }

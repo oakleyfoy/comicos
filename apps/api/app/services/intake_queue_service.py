@@ -6,6 +6,7 @@ background worker, and returns immediately. Identification/inventory happen sepa
 
 from __future__ import annotations
 
+import json
 import logging
 import secrets
 import uuid
@@ -36,6 +37,7 @@ from app.models.intake_queue import (
     IntakeSession,
     IntakeSessionItem,
     MATCH_SOURCE_CATALOG_UPC,
+    MATCH_SOURCE_COVER_READ,
     MATCH_SOURCE_LEARNED,
     MATCH_SOURCE_MANUAL,
     utc_now,
@@ -392,6 +394,35 @@ def _log_user_fingerprint_resolution(
         )
     except Exception:
         logger.debug("intake.fingerprint.user_resolution_skip item_id=%s", item.id, exc_info=True)
+
+
+def _barcode_gap_recovery_hints(item: IntakeSessionItem) -> dict[str, object]:
+    raw = item.barcode_read_json
+    if not raw:
+        return {}
+    try:
+        parsed = json.loads(raw)
+    except json.JSONDecodeError:
+        return {}
+    if not isinstance(parsed, dict):
+        return {}
+    gap = parsed.get("barcode_gap")
+    if not isinstance(gap, dict):
+        return {}
+    hints = gap.get("recovery_hints")
+    return hints if isinstance(hints, dict) else {}
+
+
+def _intake_relax_barcode_catalog_validation(item: IntakeSessionItem) -> bool:
+    """Facsimile / cover-read paths: barcode encodes supplement #, not cover issue #."""
+    if (item.match_source or "") == MATCH_SOURCE_COVER_READ:
+        return True
+    hints = _barcode_gap_recovery_hints(item)
+    if hints.get("facsimile_or_reprint"):
+        return True
+    if hints.get("barcode_issue_authoritative") is False:
+        return True
+    return False
 
 
 def _intake_barcode_attach_trusted(session: Session, *, item: IntakeSessionItem) -> bool:
@@ -1024,6 +1055,7 @@ def add_intake_item_to_inventory(
 
     if _intake_can_learn_barcode(item):
         trusted_catalog_upc = _intake_barcode_attach_trusted(session, item=item)
+        relax_validation = _intake_relax_barcode_catalog_validation(item)
         _attach_intake_barcode_repair(
             session,
             item=item,
@@ -1031,7 +1063,7 @@ def add_intake_item_to_inventory(
             variant_id=variant_id,
             user_id=owner_user_id,
             learned_source=intake_repair_learned_source(item.match_source),
-            require_catalog_validation=not trusted_catalog_upc,
+            require_catalog_validation=not (trusted_catalog_upc or relax_validation),
         )
 
     copy = create_received_catalog_copy(

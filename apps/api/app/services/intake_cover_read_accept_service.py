@@ -11,6 +11,8 @@ from sqlmodel import Session, select
 
 from app.models.catalog_master import CatalogIssue, CatalogSeries
 from app.models.intake_queue import (
+    ITEM_AUTO_MATCHED,
+    MATCH_SOURCE_COVER_READ,
     MATCH_SOURCE_MANUAL,
     IntakeSessionItem,
 )
@@ -24,7 +26,6 @@ from app.services.gcd_user_barcode_contribution_service import contribute_barcod
 from app.services.intake_queue_service import (
     _attach_intake_barcode_repair,
     _load_owned_item,
-    _reprocess_intake_item_sync,
 )
 from app.services.p103_gcd_enrichment_helpers import extract_gcd_issue_id
 from app.services.p106_barcode_gap_resolver_service import (
@@ -263,6 +264,9 @@ def accept_intake_cover_read_identity(
                 detail=str(exc),
             ) from exc
 
+    item.status = ITEM_AUTO_MATCHED
+    item.reason = "Cover identity confirmed — add to inventory when ready."
+    session.add(item)
     session.commit()
     logger.info(
         "intake.cover_read.accepted item_id=%s gcd_issue_id=%s catalog_issue_id=%s barcode=%s",
@@ -271,6 +275,5 @@ def accept_intake_cover_read_identity(
         catalog_issue_id,
         barcode,
     )
-    _reprocess_intake_item_sync(session, item_id=int(item.id or 0))
     session.refresh(item)
     return item

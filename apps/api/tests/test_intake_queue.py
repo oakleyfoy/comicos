@@ -651,3 +651,72 @@ def test_add_intake_item_to_inventory_catalog_upc_and_bad_variant() -> None:
         copy = session.get(InventoryCopy, int(updated.inventory_copy_id))
         assert copy is not None
         assert copy.catalog_variant_id is None
+
+
+MARVEL_FACSIMILE_BC = "75960620629200111"  # supplement encodes #1, not cover #122
+
+
+def test_add_intake_item_to_inventory_cover_read_skips_barcode_issue_validation() -> None:
+    """Facsimile barcode vs cover issue # must not 422 after Use this book."""
+    from app.models import Acquisition, InventoryCopy
+    from app.models.acquisition import ACQUISITION_TYPE_OTHER
+
+    engine = _engine()
+    with Session(engine) as session:
+        _seed_user(session)
+        pub = CatalogPublisher(name="Marvel", normalized_name="marvel")
+        session.add(pub)
+        session.commit()
+        series = CatalogSeries(
+            name="The Amazing Spider-Man",
+            normalized_name="the amazing spider-man",
+            publisher_id=int(pub.id),
+        )
+        session.add(series)
+        session.commit()
+        issue = CatalogIssue(
+            series_id=int(series.id),
+            publisher_id=int(pub.id),
+            issue_number="122",
+            normalized_issue_number="122",
+            cover_date=date(1973, 7, 1),
+        )
+        session.add(issue)
+        session.commit()
+        acq = Acquisition(user_id=1, acquisition_type=ACQUISITION_TYPE_OTHER)
+        session.add(acq)
+        session.commit()
+        intake = IntakeSession(
+            user_id=1,
+            session_token="cover-read-add-tok",
+            status="active",
+            acquisition_id=int(acq.id),
+            expires_at=datetime(2099, 1, 1, tzinfo=timezone.utc),
+        )
+        session.add(intake)
+        session.commit()
+        gap_json = (
+            '{"barcode_gap":{"recovery_hints":{"vision_cover_read_used":true,'
+            '"facsimile_or_reprint":true,"barcode_issue_authoritative":false}}}'
+        )
+        item = IntakeSessionItem(
+            session_id=int(intake.id),
+            user_id=1,
+            storage_path="scan.jpg",
+            status=ITEM_AUTO_MATCHED,
+            normalized_barcode=MARVEL_FACSIMILE_BC,
+            selected_catalog_issue_id=int(issue.id),
+            match_source="cover_read",
+            barcode_read_json=gap_json,
+        )
+        session.add(item)
+        session.commit()
+        session.refresh(item)
+
+        updated = svc.add_intake_item_to_inventory(
+            session, item_id=int(item.id or 0), owner_user_id=1
+        )
+        assert updated.status == ITEM_ADDED_TO_INVENTORY
+        copies = session.exec(select(InventoryCopy)).all()
+        assert len(copies) == 1
+        assert int(copies[0].catalog_issue_id or 0) == int(issue.id)
