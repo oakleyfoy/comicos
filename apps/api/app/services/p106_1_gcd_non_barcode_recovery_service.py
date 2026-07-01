@@ -311,13 +311,19 @@ def _vision_cover_read_for_recovery(
     failures degrade silently.
     """
     settings = get_settings()
-    if not getattr(settings, "photo_import_vision_sandbox", False):
-        return None
     api_key = getattr(settings, "openai_api_key", None)
     if not api_key:
         logger.info("p106_1.vision_cover_read_skipped item_id=%s reason=no_openai_key", intake_item_id)
         return None
-    model = getattr(settings, "photo_import_vision_sandbox_model", "") or "gpt-4o"
+    # Core identification capability — NOT gated on PHOTO_IMPORT_VISION_SANDBOX. That
+    # flag is set per-service and was missing on the worker (which runs the full-cover
+    # reprocess), so gating on it silently disabled vision there. It only needs an
+    # OpenAI key. Prefer a configured model, else the reliable gpt-4o.
+    model = (
+        getattr(settings, "photo_import_vision_sandbox_model", "")
+        or getattr(settings, "photo_import_accurate_vision_model", "")
+        or "gpt-4o"
+    )
     try:
         from app.services.gpt_comic_vision_client import call_comic_vision
 
@@ -430,31 +436,32 @@ def gather_intake_gcd_recovery_hints(
             _REPRINT_DIGEST.search(str(getattr(p105, "correction_reason", "") or "").lower())
         )
 
-    # GPT vision fallback for the full-cover review path: when local OCR can't read
-    # a reliable series off the cover (Tesseract often grabs the barcode strip), ask
-    # the vision model. This is what makes the facsimile path work in production.
-    from app.services.intake_fingerprint_image_region_service import REGION_FULL_COVER
-
-    # On the full-cover review path the user explicitly uploaded a cover to identify
-    # it, so always run the GPT vision read here. Local Tesseract is unreliable on
-    # covers — it reads the barcode strip ("9606\"20629") or short garbage ("WAN")
-    # that still *looks* like a series, so we cannot gate on OCR "quality". The vision
-    # read is the same capability that instantly recognizes the book in chat. Gated to
-    # full-cover, region-safe images behind the sandbox flag + key, so it never runs on
-    # barcode-strip scans. The result only overrides when it returns a real series.
+    # GPT vision read for the recovery path: when the barcode lookup has failed and
+    # local OCR can't read a reliable series off the cover (Tesseract often grabs the
+    # barcode strip), ask the vision model — the same capability that instantly
+    # recognizes the book in chat. This is what makes the facsimile path work.
     vision_cover_read_used = False
-    full_cover_region = (
-        fingerprint_image_region == REGION_FULL_COVER and fingerprint_region_safe is not False
-    )
-    if image_bytes and full_cover_region and not full_cover_followup_required:
+    # Fire vision whenever we're in recovery with an image and aren't about to ask
+    # for a *different* photo. We deliberately do NOT gate on the region classifier:
+    # a barcode strip in the corner routinely makes it miss "full_cover", which is
+    # exactly the case we need vision for. When there's no readable cover (e.g. a
+    # bare barcode crop) the vision read returns None and we fall through untouched.
+    run_vision = bool(image_bytes) and not full_cover_followup_required
+    if run_vision:
         vision = _vision_cover_read_for_recovery(
             image_bytes, intake_item_id=int(getattr(item, "id", 0) or 0)
         )
-        if vision is not None:
+        if vision is not None and vision.series:
             vision_cover_read_used = True
-            ocr_title = vision.series or ocr_title
-            ocr_issue = vision.issue_number or ocr_issue
-            ocr_publisher = vision.publisher or ocr_publisher
+            # The vision read looks at the physical cover after the barcode lookup
+            # already failed, so it beats a weak catalog/fingerprint-derived guess.
+            # Override series/issue rather than only filling blanks.
+            series = vision.series
+            ocr_title = vision.series
+            if vision.issue_number:
+                ocr_issue = vision.issue_number
+            if vision.publisher:
+                ocr_publisher = vision.publisher
             facsimile = facsimile or vision.facsimile
             ocr_confidence = max(ocr_confidence, vision.confidence)
             if vision.year is not None and year is None:
@@ -462,8 +469,9 @@ def gather_intake_gcd_recovery_hints(
             if vision.reasoning_excerpt:
                 raw_ocr_excerpt = (raw_ocr_excerpt or "") + f" [vision] {vision.reasoning_excerpt}"
             logger.info(
-                "p106_1.vision_cover_read item_id=%s series=%r issue=%r publisher=%r facsimile=%s conf=%.2f",
+                "p106_1.vision_cover_read item_id=%s region=%r series=%r issue=%r publisher=%r facsimile=%s conf=%.2f",
                 getattr(item, "id", None),
+                fingerprint_image_region,
                 vision.series,
                 vision.issue_number,
                 vision.publisher,

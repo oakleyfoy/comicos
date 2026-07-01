@@ -475,7 +475,7 @@ def test_vision_fallback_recovers_cover_when_tesseract_garbles(
 
 @patch("app.services.p106_1_gcd_non_barcode_recovery_service.get_settings")
 @patch("app.services.p106_1_gcd_non_barcode_recovery_service.extract_ocr_signal")
-def test_vision_fallback_skipped_when_sandbox_disabled(
+def test_vision_fallback_skipped_when_no_openai_key(
     mock_ocr: MagicMock,
     mock_settings: MagicMock,
     session: Session,
@@ -483,11 +483,13 @@ def test_vision_fallback_skipped_when_sandbox_disabled(
 ) -> None:
     from types import SimpleNamespace
 
+    # No OpenAI key configured -> vision read is skipped (the sandbox flag is no
+    # longer required, so it does NOT disable vision on its own).
     mock_ocr.return_value = MagicMock(
         confidence=0.2, title='9606"20629', issue_number="1", publisher=None, raw_text="garbage"
     )
     mock_settings.return_value = SimpleNamespace(
-        photo_import_vision_sandbox=False, openai_api_key="sk-test"
+        photo_import_vision_sandbox=False, openai_api_key=None
     )
     item = _FakeIntakeItem(matched_issue_number="1", matched_publisher="Marvel")
     hints = gather_intake_gcd_recovery_hints(
