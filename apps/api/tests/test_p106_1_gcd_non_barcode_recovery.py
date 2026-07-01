@@ -589,6 +589,98 @@ def test_vision_cover_read_surfaces_review_candidate_without_gcd_match(
     assert diag.get("cover_read_identity_detected") is True
 
 
+@patch("app.services.gpt_comic_vision_client.call_comic_vision")
+@patch("app.services.p106_1_gcd_non_barcode_recovery_service.get_settings")
+@patch("app.services.p106_1_gcd_non_barcode_recovery_service.extract_ocr_signal")
+def test_vision_cover_read_wins_when_prior_exact_gcd_barcode_hit(
+    mock_ocr: MagicMock,
+    mock_settings: MagicMock,
+    mock_vision: MagicMock,
+    session: Session,
+    tmp_path: Path,
+) -> None:
+    """Regression: GCD barcode row must not skip GPT cover-read review on full cover."""
+    from types import SimpleNamespace
+
+    mock_ocr.return_value = MagicMock(
+        confidence=0.2, title="SILVER", issue_number="1", publisher="Marvel", raw_text="garbage"
+    )
+    mock_settings.return_value = SimpleNamespace(
+        photo_import_vision_sandbox=False,
+        openai_api_key="sk-test",
+        photo_import_vision_sandbox_model="gpt-4o",
+    )
+    mock_vision.return_value = (
+        {
+            "comics": [
+                {
+                    "series": "The Amazing Spider-Man",
+                    "issue_number": "122",
+                    "publisher": "Marvel",
+                    "year": 1973,
+                    "confidence": 0.95,
+                    "reasoning": "Cover reads ASM 122 facsimile",
+                }
+            ]
+        },
+        {},
+        "{}",
+        "gpt-4o",
+    )
+    bc = "75960620629200111"
+    gcd_path = _gcd_db(
+        tmp_path,
+        rows=[
+            {
+                "gcd_issue_id": 8001,
+                "series": "Silver Surfer",
+                "number": "1",
+                "barcode": bc,
+                "title": "Silver Surfer",
+                "notes": "",
+                "key_date": "2022-01-00",
+                "series_id": 11,
+                "publisher_id": 1,
+            },
+        ],
+    )
+    item = _FakeIntakeItem(matched_issue_number="1", matched_publisher="Marvel")
+    hints = gather_intake_gcd_recovery_hints(
+        session,
+        item=item,
+        normalized_barcode=bc,
+        image_path=None,
+        image_bytes=b"fake-cover",
+        p105=None,
+        fingerprint_region_safe=True,
+        fingerprint_image_region="full_cover",
+    )
+    assert hints.vision_cover_read_used is True
+    assert hints.facsimile_or_reprint is True
+    prior = {
+        "gcd_match_count": 1,
+        "exact_barcode_path": True,
+        "ready_to_auto_import": True,
+        "gcd_matches": [{"series": "Silver Surfer", "issue_number": "1", "gcd_issue_id": 8001}],
+        "normalized_barcode": bc,
+    }
+    diag = diagnose_gcd_non_barcode_recovery(
+        session,
+        barcode=bc,
+        gcd_path=gcd_path,
+        cache_path=None,
+        hints=hints,
+        image_path=None,
+        prior_diagnosis=prior,
+    )
+    assert diag.get("p106_1_skipped") is not True
+    tops = diag.get("needs_review_top_candidates")
+    assert isinstance(tops, list) and tops
+    assert tops[0].get("source") == "cover_read"
+    assert tops[0].get("series") == "The Amazing Spider-Man"
+    assert diag.get("ready_to_auto_import") is False
+
+
 def test_has_reliable_series_hint_rejects_blank_and_generic() -> None:
     assert has_reliable_series_hint(None) is False
     assert has_reliable_series_hint("") is False

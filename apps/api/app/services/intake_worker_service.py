@@ -528,6 +528,7 @@ def _should_run_p106_1_non_barcode_recovery(
     normalized: str,
     gap_diag: dict[str, Any] | None,
     candidate: dict[str, Any] | None,
+    using_full_cover_recognition: bool = False,
 ) -> bool:
     """Run P106.1 when P106 found no attachable GCD barcode match and local catalog missed."""
     if candidate is not None:
@@ -535,6 +536,10 @@ def _should_run_p106_1_non_barcode_recovery(
     if len(normalize_upc(normalized)) < 17:
         return False
     if gap_diag is not None and int(gap_diag.get("gcd_match_count") or 0) > 0:
+        # Full-cover facsimile/reprint: UPC may hit GCD on the wrong edition while GPT
+        # reads the real cover — still run P106.1 for vision + title/issue recovery.
+        if using_full_cover_recognition:
+            return True
         return False
     if gap_diag is not None and gap_diag.get("p106_1_skipped"):
         return False
@@ -1065,6 +1070,7 @@ def process_intake_item(session: Session, *, item_id: int) -> str:
                 normalized=normalized,
                 gap_diag=gap_diag,
                 candidate=candidate,
+                using_full_cover_recognition=using_full_cover_followup,
             ):
                 from app.services.p106_1_gcd_non_barcode_recovery_service import (
                     P106_1_RECOVERY_STAGE,

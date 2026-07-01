@@ -1483,6 +1483,15 @@ def _finalize_p106_1_diagnosis_with_fingerprint_review(
     return base
 
 
+def _p106_1_cover_identity_override(hints: IntakeGcdRecoveryHints) -> bool:
+    """Cover/OCR identity should win over a misleading exact-barcode GCD hit (facsimile UPC)."""
+    return bool(
+        hints.vision_cover_read_used
+        or hints.facsimile_or_reprint
+        or hints.barcode_issue_authoritative is False
+    )
+
+
 def diagnose_gcd_non_barcode_recovery(
     session: Session,
     *,
@@ -1497,10 +1506,15 @@ def diagnose_gcd_non_barcode_recovery(
     base = dict(prior_diagnosis)
     base["normalized_barcode"] = normalize_scan_preserving_supplement(barcode) or barcode
     base["fingerprint_candidate_count"] = len(_qualified_fingerprint_candidates(hints.fingerprint_candidates))
-    if int(prior_diagnosis.get("gcd_match_count") or 0) > 0:
+    prior_gcd_hits = int(prior_diagnosis.get("gcd_match_count") or 0)
+    if prior_gcd_hits > 0 and not _p106_1_cover_identity_override(hints):
         base["p106_1_skipped"] = True
         base["p106_1_skip_reason"] = "prior_p106_gcd_match_count_nonzero"
         return _finalize_p106_1_diagnosis_with_fingerprint_review(session, base, hints=hints, barcode=barcode)
+    if prior_gcd_hits > 0 and _p106_1_cover_identity_override(hints):
+        base["ready_to_auto_import"] = False
+        base["exact_barcode_path"] = False
+        base.setdefault("status", P106_STATUS_REVIEW_REQUIRED)
     if prior_diagnosis.get("already_resolved"):
         return _finalize_p106_1_diagnosis_with_fingerprint_review(session, base, hints=hints, barcode=barcode)
     if not hints.issue_number or not hints.publisher:
@@ -1671,31 +1685,53 @@ def diagnose_gcd_non_barcode_recovery(
                 instrumentation["ui_finish_reason"] = (
                     "Likely facsimile/reprint — showing closest catalog editions"
                 )
-        if not base.get("needs_review_top_candidates"):
-            # GCD (a subset DB) had no scorable row for the cover-read issue. If the
-            # vision read confidently identified the book, surface that identity as the
-            # top review candidate so the collector sees the real book (e.g. Amazing
-            # Spider-Man #122 facsimile) instead of an unrelated fingerprint guess. The
-            # fingerprint rows still get appended below by the finalize step.
-            vision_candidate = _vision_cover_read_review_candidate(hints)
-            if vision_candidate is not None:
-                base["cover_read_identity_detected"] = True
-                if vision_candidate.get("facsimile"):
-                    base["facsimile_reprint_detected"] = True
+        vision_candidate = _vision_cover_read_review_candidate(hints)
+        if vision_candidate is not None:
+            from app.services.p106_fingerprint_review_fallback_service import _normalize_identity_triple
+
+            base["cover_read_identity_detected"] = True
+            if vision_candidate.get("facsimile"):
+                base["facsimile_reprint_detected"] = True
+            existing_tops = base.get("needs_review_top_candidates")
+            if isinstance(existing_tops, list) and existing_tops:
+                seen = {
+                    _normalize_identity_triple(
+                        publisher=str(r.get("publisher") or ""),
+                        series=str(r.get("series") or r.get("title") or ""),
+                        issue_number=str(r.get("issue_number") or ""),
+                    )
+                    for r in existing_tops
+                    if isinstance(r, dict)
+                }
+                merged = [vision_candidate]
+                for row in existing_tops:
+                    if not isinstance(row, dict):
+                        continue
+                    key = _normalize_identity_triple(
+                        publisher=str(row.get("publisher") or ""),
+                        series=str(row.get("series") or row.get("title") or ""),
+                        issue_number=str(row.get("issue_number") or ""),
+                    )
+                    if key in seen:
+                        continue
+                    seen.add(key)
+                    merged.append(row)
+                base["needs_review_top_candidates"] = merged[:3]
+            else:
                 base["needs_review_top_candidates"] = [vision_candidate]
-                base["review_decision"] = "cover_read_identity"
-                base["status"] = P106_STATUS_REVIEW_REQUIRED
-                base.setdefault("gcd_series", vision_candidate.get("series"))
-                base.setdefault("gcd_issue_number", vision_candidate.get("issue_number"))
-                base.setdefault("gcd_publisher", vision_candidate.get("publisher"))
-                instrumentation["cover_read_identity_detected"] = True
-                instrumentation["ui_finish_reason"] = (
-                    "Cover reads {series} #{issue}"
-                    + (" — likely facsimile/reprint" if vision_candidate.get("facsimile") else "")
-                ).format(
-                    series=vision_candidate.get("series"),
-                    issue=vision_candidate.get("issue_number"),
-                )
+            base["review_decision"] = "cover_read_identity"
+            base["status"] = P106_STATUS_REVIEW_REQUIRED
+            base["gcd_series"] = vision_candidate.get("series")
+            base["gcd_issue_number"] = vision_candidate.get("issue_number")
+            base["gcd_publisher"] = vision_candidate.get("publisher")
+            instrumentation["cover_read_identity_detected"] = True
+            instrumentation["ui_finish_reason"] = (
+                "Cover reads {series} #{issue}"
+                + (" — likely facsimile/reprint" if vision_candidate.get("facsimile") else "")
+            ).format(
+                series=vision_candidate.get("series"),
+                issue=vision_candidate.get("issue_number"),
+            )
         return _finalize_p106_1_diagnosis_with_fingerprint_review(session, base, hints=hints, barcode=barcode)
 
     if fingerprint_narrowed:
