@@ -1531,6 +1531,7 @@ def diagnose_gcd_non_barcode_recovery(
     if prior_gcd_hits > 0 and _p106_1_cover_identity_override(hints, prior_diagnosis=prior_diagnosis):
         base["ready_to_auto_import"] = False
         base["exact_barcode_path"] = False
+        base["misleading_gcd_barcode_row"] = True
         base.setdefault("status", P106_STATUS_REVIEW_REQUIRED)
     if prior_diagnosis.get("already_resolved"):
         return _finalize_p106_1_diagnosis_with_fingerprint_review(session, base, hints=hints, barcode=barcode)
@@ -1670,6 +1671,12 @@ def diagnose_gcd_non_barcode_recovery(
             prior_diagnosis=prior_diagnosis,
             instrumentation=instrumentation,
         )
+        gcd_count_for_payload = (
+            prior_gcd_hits
+            if prior_gcd_hits > 0
+            and _p106_1_cover_identity_override(hints, prior_diagnosis=prior_diagnosis)
+            else 0
+        )
         base.update(
             {
                 "ready_to_auto_import": False,
@@ -1677,7 +1684,7 @@ def diagnose_gcd_non_barcode_recovery(
                 "reason": reason,
                 "final_reason": reason,
                 "recovery_block_reason": block_reason,
-                "gcd_match_count": 0,
+                "gcd_match_count": gcd_count_for_payload,
             }
         )
         if hints.facsimile_or_reprint and ranked:

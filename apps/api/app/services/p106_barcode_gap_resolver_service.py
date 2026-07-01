@@ -819,6 +819,13 @@ def barcode_gap_payload_from_diagnosis(diagnosis: dict[str, Any]) -> dict[str, A
         payload["full_cover_reprocess_completed"] = True
     if diagnosis.get("facsimile_reprint_detected"):
         payload["facsimile_reprint_detected"] = True
+    if diagnosis.get("cover_read_identity_detected"):
+        payload["cover_read_identity_detected"] = True
+    if diagnosis.get("misleading_gcd_barcode_row"):
+        payload["misleading_gcd_barcode_row"] = True
+    rh = diagnosis.get("recovery_hints")
+    if isinstance(rh, dict):
+        payload["recovery_hints"] = rh
     return payload
 
 

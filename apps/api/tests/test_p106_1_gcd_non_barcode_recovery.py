@@ -17,6 +17,7 @@ from app.services.p106_barcode_gap_resolver_service import (
 )
 from app.models.catalog_master import CatalogIssue, CatalogPublisher, CatalogSeries
 from app.services.gcd_barcode_import_service import GCD_SOURCE
+from app.services.p106_fingerprint_review_fallback_service import attach_fingerprint_review_to_diagnosis
 from app.services.p106_1_gcd_non_barcode_recovery_service import (
     FINGERPRINT_CONFLICT_WITH_POOL_REASON,
     FingerprintRecoveryCandidate,
@@ -757,6 +758,26 @@ def test_vision_cover_read_wins_when_prior_exact_gcd_barcode_hit(
     assert tops[0].get("source") == "cover_read"
     assert tops[0].get("series") == "The Amazing Spider-Man"
     assert diag.get("ready_to_auto_import") is False
+    assert int(diag.get("gcd_match_count") or 0) == 1
+
+
+def test_attach_fingerprint_skipped_when_gcd_barcode_without_cover_read(
+    session: Session,
+) -> None:
+    diagnosis: dict[str, object] = {"gcd_match_count": 1, "exact_barcode_path": True}
+    hints = IntakeGcdRecoveryHints(
+        publisher="Marvel",
+        series="Silver Surfer",
+        issue_number="1",
+        year=None,
+        ocr_title=None,
+        ocr_issue_number=None,
+        ocr_publisher=None,
+        fingerprint_region_safe=True,
+        fingerprint_image_region="full_cover",
+    )
+    attach_fingerprint_review_to_diagnosis(session, diagnosis, hints=hints, barcode="75960620629200111")
+    assert diagnosis.get("needs_review_top_candidates") is None
 
 
 def test_has_reliable_series_hint_rejects_blank_and_generic() -> None:

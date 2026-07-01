@@ -263,6 +263,18 @@ def attach_fingerprint_review_to_diagnosis(
 ) -> dict[str, Any]:
     if diagnosis.get("needs_full_cover_photo"):
         return {"top_candidates": [], "collapsed_family_count": 0, "single_family": False, "qualified_fingerprint_count": 0}
+    tops_existing = diagnosis.get("needs_review_top_candidates")
+    has_cover_read_row = diagnosis.get("cover_read_identity_detected") or (
+        isinstance(tops_existing, list)
+        and any(isinstance(r, dict) and r.get("source") == "cover_read" for r in tops_existing)
+    )
+    if int(diagnosis.get("gcd_match_count") or 0) > 0 and not has_cover_read_row:
+        return {
+            "top_candidates": [],
+            "collapsed_family_count": 0,
+            "single_family": False,
+            "qualified_fingerprint_count": 0,
+        }
     if not hints.fingerprint_region_safe:
         return {"top_candidates": [], "collapsed_family_count": 0, "single_family": False, "qualified_fingerprint_count": 0}
     bundle = build_fingerprint_review_bundle(session, hints, limit=3)

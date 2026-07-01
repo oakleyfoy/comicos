@@ -605,6 +605,14 @@ def _gap_diagnosis_has_cover_read_review(gap_diag: dict[str, Any] | None) -> boo
     return any(isinstance(r, dict) and r.get("source") == "cover_read" for r in tops)
 
 
+def _gap_has_misleading_gcd_barcode_row(gap_diag: dict[str, Any] | None) -> bool:
+    if not gap_diag:
+        return False
+    if gap_diag.get("misleading_gcd_barcode_row"):
+        return True
+    return int(gap_diag.get("gcd_match_count") or 0) > 0
+
+
 def _fingerprint_review_candidate_count(tops: Any) -> int:
     if not isinstance(tops, list):
         return 0
@@ -1255,7 +1263,7 @@ def process_intake_item(session: Session, *, item_id: int) -> str:
                     if (
                         candidate is None
                         and gap_diag
-                        and int(gap_diag.get("gcd_match_count") or 0) > 0
+                        and _gap_has_misleading_gcd_barcode_row(gap_diag)
                         and not _gap_diagnosis_has_cover_read_review(gap_diag)
                         and recognition_bytes
                     ):
@@ -1406,8 +1414,7 @@ def process_intake_item(session: Session, *, item_id: int) -> str:
 
                     if (
                         not _gap_diagnosis_has_cover_read_review(gap_diag)
-                        and int((gap_diag or {}).get("gcd_match_count") or 0) > 0
-                        and not has_full_cover_image
+                        and _gap_has_misleading_gcd_barcode_row(gap_diag)
                     ):
                         apply_full_cover_followup_to_diagnosis(
                             gap_diag,
