@@ -530,16 +530,10 @@ def _should_run_p106_1_non_barcode_recovery(
     candidate: dict[str, Any] | None,
     using_full_cover_recognition: bool = False,
 ) -> bool:
-    """Run P106.1 when P106 found no attachable GCD barcode match and local catalog missed."""
+    """Run P106.1 when no catalog candidate is attached yet (incl. misleading GCD barcode rows)."""
     if candidate is not None:
         return False
     if len(normalize_upc(normalized)) < 17:
-        return False
-    if gap_diag is not None and int(gap_diag.get("gcd_match_count") or 0) > 0:
-        # Full-cover facsimile/reprint: UPC may hit GCD on the wrong edition while GPT
-        # reads the real cover — still run P106.1 for vision + title/issue recovery.
-        if using_full_cover_recognition:
-            return True
         return False
     if gap_diag is not None and gap_diag.get("p106_1_skipped"):
         return False
@@ -598,6 +592,17 @@ def _intake_full_cover_followup_gate(
         full_cover_required = True
     skip_fp = full_cover_required or not recognition_region.fingerprint_region_safe
     return full_cover_required, skip_fp
+
+
+def _gap_diagnosis_has_cover_read_review(gap_diag: dict[str, Any] | None) -> bool:
+    if not gap_diag:
+        return False
+    if gap_diag.get("cover_read_identity_detected"):
+        return True
+    tops = gap_diag.get("needs_review_top_candidates")
+    if not isinstance(tops, list):
+        return False
+    return any(isinstance(r, dict) and r.get("source") == "cover_read" for r in tops)
 
 
 def _fingerprint_review_candidate_count(tops: Any) -> int:
@@ -1249,7 +1254,7 @@ def process_intake_item(session: Session, *, item_id: int) -> str:
                     unsafe_fingerprint_region = not recognition_region.fingerprint_region_safe or (
                         not primary_region.fingerprint_region_safe and not has_full_cover_image
                     )
-                    if unsafe_fingerprint_region:
+                    if unsafe_fingerprint_region and not _gap_diagnosis_has_cover_read_review(gap_diag):
                         gap_diag.pop("needs_review_top_candidates", None)
                         gap_diag.pop("fingerprint_review", None)
                         gap_diag.pop("review_decision", None)
@@ -1284,10 +1289,11 @@ def process_intake_item(session: Session, *, item_id: int) -> str:
                         has_full_cover_followup_image=has_full_cover_image,
                     ):
                         full_cover_required = True
-                        gap_diag.pop("needs_review_top_candidates", None)
-                        gap_diag.pop("fingerprint_review", None)
-                        gap_diag.pop("review_decision", None)
-                        _clear_fingerprint_artifacts(session, item_id=int(item.id or 0), gap_diag=gap_diag)
+                        if not _gap_diagnosis_has_cover_read_review(gap_diag):
+                            gap_diag.pop("needs_review_top_candidates", None)
+                            gap_diag.pop("fingerprint_review", None)
+                            gap_diag.pop("review_decision", None)
+                            _clear_fingerprint_artifacts(session, item_id=int(item.id or 0), gap_diag=gap_diag)
 
                     debug_payload: dict[str, Any] = {
                         "intake_item_id": item_id,

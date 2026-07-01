@@ -1477,7 +1477,15 @@ def _finalize_p106_1_diagnosis_with_fingerprint_review(
         ),
     )
     if not hints.fingerprint_region_safe:
-        base.pop("needs_review_top_candidates", None)
+        tops = base.get("needs_review_top_candidates")
+        has_cover_read = base.get("cover_read_identity_detected") or (
+            isinstance(tops, list)
+            and any(isinstance(r, dict) and r.get("source") == "cover_read" for r in tops)
+        )
+        if not has_cover_read:
+            base.pop("needs_review_top_candidates", None)
+            return base
+        attach_fingerprint_review_to_diagnosis(session, base, hints=hints, barcode=barcode)
         return base
     attach_fingerprint_review_to_diagnosis(session, base, hints=hints, barcode=barcode)
     return base
@@ -1837,7 +1845,18 @@ def enrich_gap_diagnosis_with_gcd_non_barcode_recovery(
     p105: Any,
     recovery_hints: IntakeGcdRecoveryHints | None = None,
 ) -> dict[str, Any]:
-    if int(prior_diagnosis.get("gcd_match_count") or 0) > 0:
+    hints = recovery_hints
+    if hints is None:
+        hints = gather_intake_gcd_recovery_hints(
+            session,
+            item=item,
+            normalized_barcode=barcode,
+            image_path=image_path,
+            image_bytes=image_bytes,
+            p105=p105,
+        )
+    prior_gcd_hits = int(prior_diagnosis.get("gcd_match_count") or 0)
+    if prior_gcd_hits > 0 and not _p106_1_cover_identity_override(hints):
         logger.info(
             "p106_1.skipped barcode=%s prior_gcd_match_count=%s prior_reason=%s prior_status=%s",
             barcode,
@@ -1846,14 +1865,6 @@ def enrich_gap_diagnosis_with_gcd_non_barcode_recovery(
             prior_diagnosis.get("status"),
         )
         return prior_diagnosis
-    hints = recovery_hints or gather_intake_gcd_recovery_hints(
-        session,
-        item=item,
-        normalized_barcode=barcode,
-        image_path=image_path,
-        image_bytes=image_bytes,
-        p105=p105,
-    )
     diag = diagnose_gcd_non_barcode_recovery(
         session,
         barcode=barcode,

@@ -229,6 +229,84 @@ def test_enrich_skips_when_gcd_barcode_already_matched(session: Session, tmp_pat
     assert out is prior
 
 
+@patch("app.services.gpt_comic_vision_client.call_comic_vision")
+@patch("app.services.p106_1_gcd_non_barcode_recovery_service.get_settings")
+@patch("app.services.p106_1_gcd_non_barcode_recovery_service.extract_ocr_signal")
+def test_enrich_runs_cover_read_when_prior_gcd_barcode_hit(
+    mock_ocr: MagicMock,
+    mock_settings: MagicMock,
+    mock_vision: MagicMock,
+    session: Session,
+    tmp_path: Path,
+) -> None:
+    """Worker enrich must not return prior diagnosis before GPT cover-read (regression)."""
+    from types import SimpleNamespace
+
+    mock_ocr.return_value = MagicMock(
+        confidence=0.2, title="x", issue_number="1", publisher="Marvel", raw_text=""
+    )
+    mock_settings.return_value = SimpleNamespace(
+        photo_import_vision_sandbox=False,
+        openai_api_key="sk-test",
+        photo_import_vision_sandbox_model="gpt-4o",
+    )
+    mock_vision.return_value = (
+        {
+            "comics": [
+                {
+                    "series": "The Amazing Spider-Man",
+                    "issue_number": "122",
+                    "publisher": "Marvel",
+                    "confidence": 0.93,
+                }
+            ]
+        },
+        {},
+        "{}",
+        "gpt-4o",
+    )
+    bc = "75960620629200111"
+    gcd_path = _gcd_db(
+        tmp_path,
+        rows=[
+            {
+                "gcd_issue_id": 8001,
+                "series": "Silver Surfer",
+                "number": "1",
+                "barcode": bc,
+                "title": "Silver Surfer",
+                "notes": "",
+                "key_date": "2022-01-00",
+                "series_id": 11,
+                "publisher_id": 1,
+            },
+        ],
+    )
+    item = _FakeIntakeItem(matched_publisher="Marvel", matched_issue_number="1")
+    prior = {
+        "gcd_match_count": 1,
+        "exact_barcode_path": True,
+        "ready_to_auto_import": True,
+        "gcd_matches": [{"series": "Silver Surfer", "issue_number": "1"}],
+    }
+    out = enrich_gap_diagnosis_with_gcd_non_barcode_recovery(
+        session,
+        item=item,
+        barcode=bc,
+        gcd_path=gcd_path,
+        cache_path=None,
+        image_path=None,
+        image_bytes=b"cover-bytes",
+        prior_diagnosis=prior,
+        p105=None,
+    )
+    assert out is not prior
+    tops = out.get("needs_review_top_candidates")
+    assert isinstance(tops, list) and tops
+    assert tops[0].get("source") == "cover_read"
+    assert tops[0].get("series") == "The Amazing Spider-Man"
+
+
 @patch("app.services.p106_1_gcd_non_barcode_recovery_service.extract_ocr_signal")
 def test_facsimile_ocr_boosts_facsimile_gcd_row(
     mock_ocr: MagicMock,
